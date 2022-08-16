@@ -1,0 +1,75 @@
+# Spark
+spark_default
+spark://spark
+7077
+{"queue": "root.default"}
+
+Start Containers:
+$ docker-compose -f airflow-spark/docker/docker-compose.yml up -d
+
+Stop Containers:
+$ docker-compose -f airflow-spark/docker/docker-compose.yml down --remove-orphans
+
+
+
+
+List Images:
+$ docker images <repository_name>
+
+List Containers:
+$ docker container ls
+
+Check container logs:
+$ docker logs -f <container_name>
+
+
+To build a Dockerfile after changing sth (run inside directoty containing Dockerfile):
+cd airflow-spark/docker/docker-airflow/
+$ docker build --rm -t airflow_spark .
+
+
+
+Access container bash:
+$ docker exec -i -t <container_name> /bin/bash
+
+
+
+
+
+#IF CHANGED SOMETHING:
+#1.
+docker-compose -f airflow-spark/docker/docker-compose.yml down --remove-orphans
+#2.
+cd airflow-spark/docker/docker-airflow/
+docker build --rm -t airflow_spark .
+#3.Start Containers:
+cd ..
+cd ..
+cd ..
+docker-compose -f airflow-spark/docker/docker-compose.yml up -d
+# PostgreSQL might be not working. Push via Docker Desktop
+
+
+
+
+# DAGS directory:
+docker exec -i -t a53114f7c4af  /bin/bash
+
+
+PS C:\Users\KonuTech\DataSpellProjects\DataEngineeringProject> docker container ls
+CONTAINER ID   IMAGE                                  COMMAND                  CREATED        STATUS                    PORTS                                                      NAMES
+a53114f7c4af   docker-airflow-spark:1.10.7_3.1.2      "/entrypoint.sh webs…"   10 hours ago   Up 10 hours (unhealthy)   5555/tcp, 8080/tcp, 8793/tcp, 0.0.0.0:8282->8282/tcp       docker_airflow-webserver_1
+12e0c5f0a0ea   bitnami/spark:3.1.2                    "/opt/bitnami/script…"   10 hours ago   Up 10 hours                                                                          docker_spark-worker-3_1
+84cacfcbdc5b   bitnami/spark:3.1.2                    "/opt/bitnami/script…"   10 hours ago   Up 10 hours                                                                          docker_spark-worker-1_1
+9c02046459fe   jupyter/pyspark-notebook:spark-3.1.2   "tini -g -- start-no…"   10 hours ago   Up 10 hours               0.0.0.0:4040-4080->4040-4080/tcp, 0.0.0.0:8888->8888/tcp   docker_jupyter-spark_1
+b7db1b39011d   bitnami/spark:3.1.2                    "/opt/bitnami/script…"   10 hours ago   Up 10 hours               0.0.0.0:7077->7077/tcp, 0.0.0.0:8181->8080/tcp             docker_spark_1
+9bbc879401ed   bitnami/spark:3.1.2                    "/opt/bitnami/script…"   10 hours ago   Up 10 hours                                                                          docker_spark-worker-2_1
+3cfeadbcac43   postgres:9.6                           "docker-entrypoint.s…"   10 hours ago   Up 10 hours               0.0.0.0:5432->5432/tcp                                     docker_postgres_1
+0f371ac8dbc6   apache/airflow:2.3.0                   "/usr/bin/dumb-init …"   2 months ago   Up 10 hours (healthy)     0.0.0.0:8080->8080/tcp                                     airflow-airflow-webserver-1
+0d6882b9353d   apache/airflow:2.3.0                   "/usr/bin/dumb-init …"   2 months ago   Up 10 hours (healthy)     8080/tcp                                                   airflow-airflow-triggerer-1
+e4861611241b   apache/airflow:2.3.0                   "/usr/bin/dumb-init …"   2 months ago   Up 10 hours (healthy)     8080/tcp                                                   airflow-airflow-worker-1
+0da5f42554cf   apache/airflow:2.3.0                   "/usr/bin/dumb-init …"   2 months ago   Up 10 hours (healthy)     8080/tcp                                                   airflow-airflow-scheduler-1
+a9c96bd301de   apache/airflow:2.3.0                   "/usr/bin/dumb-init …"   2 months ago   Up 10 hours (healthy)     0.0.0.0:5555->5555/tcp, 8080/tcp                           airflow-flower-1
+ec69d4b567ba   postgres:13                            "docker-entrypoint.s…"   2 months ago   Up 10 hours (healthy)     5432/tcp                                                   airflow-postgres-1
+97b83775f189   redis:latest                           "docker-entrypoint.s…"   2 months ago   Up 10 hours (healthy)     6379/tcp                                                   airflow-redis-1
+                                               airflow-redis-1

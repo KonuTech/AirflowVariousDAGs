@@ -1,3 +1,8 @@
+# TO DO: further parametrization
+# TO DO: remove intermediary data
+# TO DO: exit codes
+
+
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 # from airflow.contrib.operators.spark_submit_operator import SparkSubmitOperator
@@ -10,6 +15,7 @@ from datetime import date, datetime, timedelta
 SPARK_MASTER = "spark://spark:7077"
 INGEST_PATH = "/usr/local/airflow/ingest"
 OUTPUT_PATH = "/usr/local/airflow/output"
+STAGING_PATH = "/usr/local/airflow/finalassignment/staging"
 SCRIPTS_PATH= "/usr/local/airflow/dags/scripts"
 BASH_SCRIPTS_PATH = f"{SCRIPTS_PATH}/bash"
 # CSV_FILE = "/usr/local/spark/resources/data/movies.csv"
@@ -70,6 +76,7 @@ get_ingest_path = BashOperator(
     dag=dag
 )
 
+
 # CHECK IF OUTPUT PATH EXISTS
 get_output_path = BashOperator(
     task_id="t_get_output_path",
@@ -79,6 +86,21 @@ get_output_path = BashOperator(
     if [ ! -d {OUTPUT_PATH} ];
     then
       mkdir -p {OUTPUT_PATH};
+    fi;
+    """,
+    dag=dag
+)
+
+
+# CHECK IF STAGING PATH EXISTS
+get_staging_path = BashOperator(
+    task_id="t_get_staging_path",
+    bash_command=
+    f"""
+    echo 'CREATING STAGING DIRECTORY IF NOT EXISTS: ';
+    if [ ! -d {STAGING_PATH} ];
+    then
+      mkdir -p {STAGING_PATH};
     fi;
     """,
     dag=dag
@@ -141,7 +163,7 @@ get_csv_output = BashOperator(
 )
 
 
-# GET CSV OUTPUT
+# GET TSV OUTPUT
 get_tsv_output = BashOperator(
     # task_id="t_get_tsv_output",
     task_id="extract_data_from_tsv",
@@ -156,7 +178,7 @@ get_tsv_output = BashOperator(
 )
 
 
-# GET CSV OUTPUT
+# GET TXT OUTPUT
 get_txt_output = BashOperator(
     # task_id="t_get_txt_output",
     task_id="extract_data_from_fixed_width",
@@ -169,6 +191,33 @@ get_txt_output = BashOperator(
     bash_command=f"{BASH_SCRIPTS_PATH}/get_txt_output.sh ",
     dag=dag
 )
+
+
+# GET JOINED DATA
+get_joined_data = BashOperator(
+    # task_id="t_get_joined_data,
+    task_id="consolidate_data",
+    bash_command=f"""
+    paste -d ',' {OUTPUT_PATH}/csv_data.csv {OUTPUT_PATH}/tsv_data.csv {OUTPUT_PATH}/fixed_width_data.csv > {OUTPUT_PATH}/extracted_data.csv
+    """,
+    dag=dag
+)
+
+
+# GET JOINED DATA
+get_transformed_data = BashOperator(
+    # task_id="t_get_transformed_data",
+    task_id="transform_data",
+    env={
+        "input_path": OUTPUT_PATH,
+        "output_path": STAGING_PATH,
+        "input": "extracted_data.csv",
+        "output": "transformed_data.csv"
+    },
+    bash_command=f"{BASH_SCRIPTS_PATH}/get_transformed_data.sh ",
+    dag=dag
+)
+
 
 # GET DAG END DATE
 get_end_date = BashOperator(
@@ -183,11 +232,15 @@ get_end_date = BashOperator(
 
 
 get_start_date >> get_ingest_path
-get_ingest_path >> get_output_path
+get_ingest_path >> get_staging_path
+get_staging_path >> get_output_path
 get_output_path >> get_status_code
 get_status_code >> get_external_data
 get_external_data >> get_extracted_data
 get_extracted_data >> get_csv_output
 get_csv_output >> get_tsv_output
 get_tsv_output >> get_txt_output
-get_txt_output >> get_end_date
+get_txt_output >> get_joined_data
+get_joined_data >> get_transformed_data
+get_transformed_data >> get_end_date
+
