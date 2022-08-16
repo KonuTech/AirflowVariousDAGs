@@ -32,11 +32,11 @@ default_args = {
 }
 
 dag = DAG(
-        dag_id="spark-postgres", 
-        description="This DAG is a sample of integration between Spark and DB. It reads CSV files, load them into a Postgres DB and then read them from the same Postgres DB.",
-        default_args=default_args, 
-        schedule_interval=timedelta(1)
-    )
+    dag_id="spark-postgres",
+    description="This DAG is a sample of integration between Spark and DB. It reads CSV files, load them into a Postgres DB and then read them from the same Postgres DB.",
+    default_args=default_args,
+    schedule_interval=timedelta(1)
+)
 
 start = DummyOperator(task_id="start", dag=dag)
 

@@ -1,11 +1,11 @@
 version: "3.7"
-services:  
+services:
     # postgres used by airflow
     postgres:
         image: postgres:9.6
         networks:
             - default_net
-        volumes: 
+        volumes:
             # Create Test database on Postgresql
             - ./docker-airflow/pg-init-scripts:/docker-entrypoint-initdb.d
         environment:
