@@ -1,3 +1,18 @@
+#  Building own DAGs
+Added DAGs:
+
+#### 1) ETL_toll_data.py
+  * prepared for the purpose of peer assignment task from:
+[ETL and Data Pipelines with Shell, Airflow and Kafka](https://www.coursera.org/learn/etl-and-data-pipelines-shell-airflow-kafka?specialization=ibm-data-engineer)
+
+
+**IDEA FOR THE PROJECT:**
+* Scrapping data from otomoto.pl
+* Cleaning data with Spark
+* Classificator with CatBoost
+* Scheduling of data scrapping & scoring of new events
+
+
 # Airflow Spark
 
 This project contains the following containers:

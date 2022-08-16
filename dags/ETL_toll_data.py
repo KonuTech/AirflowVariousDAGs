@@ -156,6 +156,20 @@ get_tsv_output = BashOperator(
 )
 
 
+# GET CSV OUTPUT
+get_txt_output = BashOperator(
+    # task_id="t_get_txt_output",
+    task_id="extract_data_from_fixed_width",
+    env={
+        "ingest_path": INGEST_PATH,
+        "output_path": OUTPUT_PATH,
+        "input": "payment-data.txt",
+        "output": "fixed_width_data.csv"
+    },
+    bash_command=f"{BASH_SCRIPTS_PATH}/get_txt_output.sh ",
+    dag=dag
+)
+
 # GET DAG END DATE
 get_end_date = BashOperator(
     task_id="t_get_end_date",
@@ -175,4 +189,5 @@ get_status_code >> get_external_data
 get_external_data >> get_extracted_data
 get_extracted_data >> get_csv_output
 get_csv_output >> get_tsv_output
-get_tsv_output>> get_end_date
+get_tsv_output >> get_txt_output
+get_txt_output >> get_end_date
