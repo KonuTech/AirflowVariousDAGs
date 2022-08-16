@@ -1,0 +1,17 @@
+Conn Id postgres_default
+Host  postgres
+Schema  airflow
+Login  airflow
+Password  airflow
+
+SELECT datname FROM pg_database
+WHERE datistemplate = false;
+
+SELECT table_schema,table_name
+FROM information_schema.tables
+ORDER BY table_schema,table_name
+;
+
+
+select * from public.movies limit 10;
+select * from public.ratings limit 10;

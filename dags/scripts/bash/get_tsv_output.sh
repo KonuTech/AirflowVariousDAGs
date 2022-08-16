@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cut -f1-4 --output-delimiter=',' ${ingest_path}/${input} > ${output_path}/${output}
