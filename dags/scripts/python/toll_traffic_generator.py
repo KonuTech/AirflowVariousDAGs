@@ -1,5 +1,5 @@
 """
-Top Traffic Simulator
+Top Traffic Simulator for Streaming purposes
 """
 from time import sleep, time, ctime
 from random import random, randint, choice
@@ -12,7 +12,7 @@ VEHICLE_TYPES = ("car", "car", "car", "car", "car", "car", "car", "car",
                  "car", "car", "car", "truck", "truck", "truck",
                  "truck", "van", "van")
 
-for _ in range(10):
+for _ in range(100000):
     vehicle_id = randint(10000, 10000000)
     vehicle_type = choice(VEHICLE_TYPES)
     now = ctime(time())
