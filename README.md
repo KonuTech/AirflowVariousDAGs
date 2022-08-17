@@ -9,7 +9,7 @@ Added DAGs:
 **IDEA FOR THE PROJECT:**
 * Scrapping data from otomoto.pl
 * Cleaning data with Spark
-* Classificator with CatBoost
+* CatBoost classificator
 * Scheduling of data scrapping & scoring of new events
 
 
