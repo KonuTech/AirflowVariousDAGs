@@ -3,7 +3,14 @@ Added DAGs:
 
 #### 1) ETL_toll_data.py
   * prepared for the purpose of peer assignment task from:
-[ETL and Data Pipelines with Shell, Airflow and Kafka](https://www.coursera.org/learn/etl-and-data-pipelines-shell-airflow-kafka?specialization=ibm-data-engineer)
+
+    [ETL and Data Pipelines with Shell, Airflow and Kafka](https://www.coursera.org/learn/etl-and-data-pipelines-shell-airflow-kafka?specialization=ibm-data-engineer)
+
+#### 2) evidently_conditional_drift_dashboard_generation.py
+* An example of Evidently with Airflow 
+
+  [Airflow Drift Detection](https://github.com/evidentlyai/evidently/tree/main/examples/integrations/airflow_drift_detection)
+
 
 
 **IDEA FOR THE PROJECT:**
