@@ -204,7 +204,7 @@ get_joined_data = BashOperator(
 )
 
 
-# GET JOINED DATA
+# GET TRANSFORMED DATA
 get_transformed_data = BashOperator(
     # task_id="t_get_transformed_data",
     task_id="transform_data",

@@ -38,6 +38,7 @@ $ docker exec -i -t <container_name> /bin/bash
 
 #IF CHANGED SOMETHING:
 #1.
+docker stop 6940b6356cfa
 docker-compose -f airflow-spark/docker/docker-compose.yml down --remove-orphans
 #2.
 cd airflow-spark/docker/docker-airflow/
@@ -73,3 +74,8 @@ a9c96bd301de   apache/airflow:2.3.0                   "/usr/bin/dumb-init …"  
 ec69d4b567ba   postgres:13                            "docker-entrypoint.s…"   2 months ago   Up 10 hours (healthy)     5432/tcp                                                   airflow-postgres-1
 97b83775f189   redis:latest                           "docker-entrypoint.s…"   2 months ago   Up 10 hours (healthy)     6379/tcp                                                   airflow-redis-1
                                                airflow-redis-1
+
+
+#    && pip install -U scikit-learn \
+#    && pip install evidently \
+#    && pip install pandas-profiling[notebook] \

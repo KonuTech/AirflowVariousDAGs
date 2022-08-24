@@ -28,7 +28,11 @@ ENV LC_ALL en_US.UTF-8
 ENV LC_CTYPE en_US.UTF-8
 ENV LC_MESSAGES en_US.UTF-8
 
+RUN echo >> requirements.txt
+RUN echo 'scikit-learn' >> requirements.txt
 COPY requirements.txt /requirements.txt
+# RUN echo 'evidently' >> /requirements.txt
+# RUN echo 'pandas-profiling[notebook]' >> /requirements.txt
 
 RUN set -ex \
     && buildDeps=' \
@@ -64,6 +68,11 @@ RUN set -ex \
     && pip install ndg-httpsclient \
     && pip install pyasn1 \
     && pip install -r requirements.txt \
+#    && pip install pip-tools \
+#    && pip-compile requirements.txt \
+#    && pip install -U scikit-learn \
+#    && pip install evidently \
+#    && pip install pandas-profiling[notebook] \
     && pip install --use-feature=2020-resolver apache-airflow[crypto,celery,postgres,hive,jdbc,mysql,ssh${AIRFLOW_DEPS:+,}${AIRFLOW_DEPS}]==${AIRFLOW_VERSION} \
     && pip install 'redis>=2.10.5,<3' \
     && if [ -n "${PYTHON_DEPS}" ]; then pip install ${PYTHON_DEPS}; fi \
@@ -124,6 +133,12 @@ RUN cd "/tmp" && \
 # Create SPARK_HOME env var
 RUN export SPARK_HOME
 ENV PATH $PATH:/usr/local/spark/bin
+
+###############################
+## TO DELETE:
+###############################
+RUN set -ex \
+
 ###############################
 ## Finish SPARK files and variables
 ###############################
