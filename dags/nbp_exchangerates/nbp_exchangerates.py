@@ -29,7 +29,7 @@ PYTHON_SCRIPTS_PATH = f"{SCRIPTS_PATH}/python"
 
 TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
-YEARS = range(2010, 2030)
+YEARS = range(2019, 2023)
 
 CURRENCY_CODES = ['CZK', 'EUR', 'GBP', 'HUF', 'RUB', 'USD']
 
