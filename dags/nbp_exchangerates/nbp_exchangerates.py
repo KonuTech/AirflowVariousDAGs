@@ -18,7 +18,7 @@ SPARK_MASTER = "spark://spark:7077"
 ROOT_PATH_DAG = "/usr/local/airflow/dags/nbp_exchangerates"
 TRANSFER_PATH = f"{ROOT_PATH_DAG}/transfer"
 INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
-TRANSFORM_PATH = f"{ROOT_PATH_DAG}/transform"
+CURATED_PATH = f"{ROOT_PATH_DAG}/curated"
 BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
 SCRIPTS_PATH = f"{ROOT_PATH_DAG}/scritps"
 BASH_SCRIPTS_PATH = f"{SCRIPTS_PATH}/bash"
@@ -155,15 +155,15 @@ get_ingest_path = BashOperator(
 )
 
 
-# CREATE TRANSFOR PATH IN NOT EXISTS
-get_transform_path = BashOperator(
-    task_id="t_get_transform_path",
+# CREATE CURATED PATH IN NOT EXISTS
+get_curated_path = BashOperator(
+    task_id="t_get_curated_path",
     bash_command=
     f"""
-    echo 'CREATING TRASNFORM DIRECTORY IF NOT EXISTS: ';
-    if [ ! -d {TRANSFORM_PATH} ];
+    echo 'CREATING CURATED DIRECTORY IF NOT EXISTS: ';
+    if [ ! -d {CURATED_PATH} ];
     then
-      mkdir -p {TRANSFORM_PATH};
+      mkdir -p {CURATED_PATH};
     fi;
     """,
     dag=dag
@@ -236,8 +236,8 @@ get_end_datetime = BashOperator(
 ###############################################################
 get_start_datetime >> get_transfer_path
 get_transfer_path >> get_ingest_path
-get_ingest_path >> get_transform_path
-get_transform_path >> get_business_ready_path
+get_ingest_path >> get_curated_path
+get_curated_path >> get_business_ready_path
 get_business_ready_path >> get_python_libraries
 get_python_libraries >> get_holidays_pl
 get_holidays_pl >> get_sundays

@@ -1,12 +1,17 @@
 #  Development of various DAGs
 Added DAGs:
 
-#### 1) ETL_toll_data.py
+#### 1) nbp_exchangerates.py
+* a solution for an assessment task from company X
+
+  ./airflow-spark/dags/nbp_exchangerates/nbp_exchangerates.py
+
+#### 2) etl_toll_data.py
   * prepared for the purpose of peer assignment task from:
 
     [ETL and Data Pipelines with Shell, Airflow and Kafka](https://www.coursera.org/learn/etl-and-data-pipelines-shell-airflow-kafka?specialization=ibm-data-engineer)
 
-#### 2) evidently_conditional_drift_dashboard_generation.py
+#### 3) evidently_conditional_drift_dashboard_generation.py
 * An example of Evidently with Airflow 
 
   [Airflow Drift Detection](https://github.com/evidentlyai/evidently/tree/main/examples/integrations/airflow_drift_detection)
