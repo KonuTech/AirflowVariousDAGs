@@ -129,6 +129,17 @@ get_python_libraries = BashOperator(
     dag=dag
 )
 
+# INSTALL LIBRARIES
+get_holidays = BashOperator(
+    task_id="t_get_holidays",
+    bash_command=
+    f"""
+    echo 'INSTALLING PYTHON LIBRARIES RELATED TO THE DAG nbp_exchangerates.py: ';
+    pip install -r {ROOT_PATH_DAG}/requirements.txt
+    """,
+    dag=dag
+)
+
 
 # GET DATE TIME OF FINISHED DAG
 get_end_datetime = BashOperator(
