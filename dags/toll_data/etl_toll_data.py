@@ -40,7 +40,7 @@ default_args = {
 
 
 dag = DAG(
-        dag_id="ETL_toll_data",
+        dag_id="etl_toll_data",
         description="Peer-graded-Assignment",
         schedule_interval="@daily",
         default_args=default_args

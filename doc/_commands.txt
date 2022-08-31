@@ -47,6 +47,7 @@ docker build --rm -t airflow_spark .
 cd ..
 cd ..
 cd ..
+docker start 6940b6356cfa
 docker-compose -f airflow-spark/docker/docker-compose.yml up -d
 # PostgreSQL might be not working. Push via Docker Desktop
 
