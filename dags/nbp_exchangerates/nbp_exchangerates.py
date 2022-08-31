@@ -8,11 +8,12 @@ from datetime import date, datetime, timedelta
 # Parameters
 ###############################################################
 SPARK_MASTER = "spark://spark:7077"
-root="/usr/local/airflow/dags/nbp_exchangerates"
-INGEST_PATH = f"{root}/ingest"
-TRANSFORM_PATH = f"{root}/transform"
-BUSINESS_READY_PATH = f"{root}/business_ready"
-SCRIPTS_PATH= f"{root}/scritps"
+ROOT_PATH_DAG = "/usr/local/airflow/dags/nbp_exchangerates"
+TRANSFER_PATH = f"{ROOT_PATH_DAG}/transfer"
+INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
+TRANSFORM_PATH = f"{ROOT_PATH_DAG}/transform"
+BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
+SCRIPTS_PATH= f"{ROOT_PATH_DAG}/scritps"
 BASH_SCRIPTS_PATH = f"{SCRIPTS_PATH}/bash"
 PYTHON_SCRIPTS_PATH = f"{SCRIPTS_PATH}/python"
 # CSV_FILE = "/usr/local/spark/resources/data/movies.csv"
@@ -38,7 +39,7 @@ default_args = {
 
 dag = DAG(
     dag_id="nbp_exchangerates",
-    description="Assassment Task",
+    description="Assessment Task",
     schedule_interval="@daily",
     default_args=default_args
 )
@@ -59,7 +60,21 @@ get_start_datetime = BashOperator(
 )
 
 
-# CHECK IF INGEST PATH EXISTS
+# CREATE TRANSFER PATH IN NOT EXISTS
+get_transfer_path = BashOperator(
+    task_id="t_get_transfer_path",
+    bash_command=
+    f"""
+    echo 'CREATING TRANSFER DIRECTORY IF NOT EXISTS: ';
+    if [ ! -d {TRANSFER_PATH} ];
+    then
+      mkdir -p {TRANSFER_PATH};
+    fi;
+    """,
+    dag=dag
+)
+
+# CREATE INGEST PATH IN NOT EXISTS
 get_ingest_path = BashOperator(
     task_id="t_get_ingest_path",
     bash_command=
@@ -74,7 +89,7 @@ get_ingest_path = BashOperator(
 )
 
 
-# CHECK IF BUSINESS READY PATH EXISTS
+# CREATE TRANSFOR PATH IN NOT EXISTS
 get_transform_path = BashOperator(
     task_id="t_get_transform_path",
     bash_command=
@@ -89,7 +104,7 @@ get_transform_path = BashOperator(
 )
 
 
-# CHECK IF BUSINESS READY PATH EXISTS
+# CREATE BUSINESS READY PATH IN NOT EXISTS
 get_business_ready_path = BashOperator(
     task_id="t_get_output_path",
     bash_command=
@@ -99,6 +114,17 @@ get_business_ready_path = BashOperator(
     then
       mkdir -p {BUSINESS_READY_PATH};
     fi;
+    """,
+    dag=dag
+)
+
+# INSTALL LIBRARIES
+get_python_libraries = BashOperator(
+    task_id="t_get_python_libraries",
+    bash_command=
+    f"""
+    echo 'INSTALLING PYTHON LIBRARIES RELATED TO THE DAG nbp_exchangerates.py: ';
+    pip install -r {ROOT_PATH_DAG}/requirements.txt
     """,
     dag=dag
 )
@@ -118,7 +144,9 @@ get_end_datetime = BashOperator(
 ###############################################################
 # Defining Tasks relations
 ###############################################################
-get_start_datetime >> get_ingest_path
+get_start_datetime >> get_transfer_path
+get_transfer_path >> get_ingest_path
 get_ingest_path >> get_transform_path
 get_transform_path >> get_business_ready_path
-get_business_ready_path >> get_end_datetime
+get_business_ready_path >> get_python_libraries
+get_python_libraries >> get_end_datetime
