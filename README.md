@@ -13,11 +13,12 @@ Added DAGs:
 
 
 
-**IDEA FOR THE PROJECT:**
+**AN IDEA FOR THE PROJECT:**
 * Scrapping data from otomoto.pl
 * Cleaning data with Spark
 * CatBoost classificator
 * Scheduling of data scrapping & scoring of new events
+* Monitoring of Target Drift, Data Frift
 
 
 # Airflow Spark
