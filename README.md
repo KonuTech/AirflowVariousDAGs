@@ -4,8 +4,7 @@ Added DAGs:
 #### 1) nbp_exchangerates.py
 * a solution for an assessment task from company X
 
-  ./airflow-spark/dags/nbp_exchangerates/nbp_exchangerates.py
-
+  [Compute values using yesterday's NBP exchanged rates - Daily](https://github.com/KonuTech/AirflowVariousDAGs/blob/master/dags/nbp_exchangerates/nbp_exchangerates.py)
 #### 2) etl_toll_data.py
   * prepared for the purpose of peer assignment task from:
 

@@ -10,6 +10,9 @@ from dateutil.relativedelta import *
 import dateutil.rrule as rrule
 from dateutil import easter
 import pandas as pd
+from pandas.io.json import json_normalize
+import requests
+import time
 
 ###############################################################
 # Parameters
@@ -23,8 +26,12 @@ BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
 SCRIPTS_PATH = f"{ROOT_PATH_DAG}/scritps"
 BASH_SCRIPTS_PATH = f"{SCRIPTS_PATH}/bash"
 PYTHON_SCRIPTS_PATH = f"{SCRIPTS_PATH}/python"
+
 TODAY = date.today()
-years = range(2010, 2030)
+YESTERDAY = TODAY - timedelta(days=1)
+YEARS = range(2010, 2030)
+
+CURRENCY_CODES = ['CZK', 'EUR', 'GBP', 'HUF', 'RUB', 'USD']
 
 ###############################################################
 # Python Functions
@@ -32,7 +39,7 @@ years = range(2010, 2030)
 
 
 # Get dated for Polish holidays
-def get_holidays_pl(years, ingest_path):
+def get_holidays_pl(ingest_path, years):
     """
     :param years:
     :param ingest_path:
@@ -71,7 +78,7 @@ def get_holidays_pl(years, ingest_path):
     output.to_csv(f'{ingest_path}/holidays_pl.csv', index=False)
 
 
-def get_sundays(years, ingest_path):
+def get_sundays(ingest_path, years):
     """
     :param years:
     :param ingest_path:
@@ -86,6 +93,44 @@ def get_sundays(years, ingest_path):
     output['holiday'] = 'Sunday'
 
     output.to_csv(f'{ingest_path}/sundays.csv', index=False)
+
+
+def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
+    """
+    :param ingest_path:
+    :param years:
+    :param yesterday:
+    :param currency_codes:
+    :return:
+    """
+
+    output = pd.DataFrame()
+    for year in years:
+        for currency_code in currency_codes:
+            print(currency_code)
+            print(year)
+            try:
+                print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{year}-12-31/")
+                respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{year}-12-31/").json()['rates']
+                # json_norm = pd.json_normalize(respond)
+                json_norm = json_normalize(respond)
+                json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                json_norm['exchange_rate'] = currency_code
+                print(json_norm)
+                output = pd.concat([output, json_norm], ignore_index=True)
+                time.sleep(60)
+            except Exception:
+                print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{yesterday}/")
+                respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{yesterday}/").json()['rates']
+                # json_norm = pd.json_normalize(respond)
+                json_norm = json_normalize(respond)
+                json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                json_norm['exchange_rate'] = currency_code
+                print(json_norm)
+                output = pd.concat([output, json_norm], ignore_index=True)
+                time.sleep(60)
+
+    output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
 
 
 ###############################################################
@@ -201,8 +246,8 @@ get_holidays_pl = PythonOperator(
     task_id="t_get_holidays_pl",
     python_callable=get_holidays_pl,
     op_kwargs={
-        'years': years,
-        'ingest_path': INGEST_PATH
+        'ingest_path': INGEST_PATH,
+        'years': YEARS
     },
     dag=dag
 )
@@ -213,11 +258,27 @@ get_sundays = PythonOperator(
     task_id="t_get_sundays",
     python_callable=get_sundays,
     op_kwargs={
-        'years': years,
-        'ingest_path': INGEST_PATH
+        'ingest_path': INGEST_PATH,
+        'years': YEARS
     },
     dag=dag
 )
+
+
+# GET NBP RATES
+get_nbp_rates = PythonOperator(
+    task_id="t_get_nbp_rates",
+    python_callable=get_nbp_rates,
+    op_kwargs={
+        'ingest_path': INGEST_PATH,
+        'years': YEARS,
+        'yesterday': YESTERDAY,
+        'currency_codes': CURRENCY_CODES
+    },
+    dag=dag
+)
+
+
 
 
 # GET DATE TIME OF FINISHED DAG
@@ -241,4 +302,5 @@ get_curated_path >> get_business_ready_path
 get_business_ready_path >> get_python_libraries
 get_python_libraries >> get_holidays_pl
 get_holidays_pl >> get_sundays
-get_sundays >> get_end_datetime
+get_sundays >> get_nbp_rates
+get_nbp_rates >> get_end_datetime
