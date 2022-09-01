@@ -24,11 +24,13 @@ import os
 SPARK_MASTER = "spark://spark:7077"
 ROOT_PATH_DAG = "/usr/local/airflow/dags/nbp_exchangerates"
 TRANSFER_PATH = f"{ROOT_PATH_DAG}/transfer"
+EXCURSIONS = f"{TRANSFER_PATH}/excursions_data.csv"
 INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
 HOLIDAYS_PL = f"{INGEST_PATH}/holidays_pl.csv"
 NBP_EXCHANGE_RATES = f"{INGEST_PATH}/nbp_exchangerates.csv"
 SUNDAYS = f"{INGEST_PATH}/sundays.csv"
 CURATED_PATH = f"{ROOT_PATH_DAG}/curated"
+NON_WORKING_DAYS = f"{CURATED_PATH}/non_working_days.csv"
 BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
 SCRIPTS_PATH = f"{ROOT_PATH_DAG}/scritps"
 BASH_SCRIPTS_PATH = f"{SCRIPTS_PATH}/bash"
@@ -68,7 +70,7 @@ def setup_business_dt(**kwargs):
     dt = (kwargs.get("execution_date", None)).strftime('%Y%m%d')
     return dt
 
-def check_if_sunday(file, dt):
+def check_if_non_working_day(file, dt):
     """
     :param ingest_path:
     :param years:
@@ -99,7 +101,7 @@ def check_if_sunday(file, dt):
         print("WORKDAY: NOT SUNDAY. MOVING THE PROCESS ON.")
 
 
-def check_if_files_exist(file):
+def check_if_files_exists(file):
     """
     :param files:
     :return: False if file exists
@@ -277,12 +279,12 @@ get_setup_business_dt = PythonOperator(
 )
 
 # Check if today is Sunday
-check_if_sunday = PythonOperator(
-    task_id="t_check_if_sunday",
+check_if_non_working_day = PythonOperator(
+    task_id="t_check_if_non_working_day",
     provide_context=False,
-    python_callable=check_if_sunday,
+    python_callable=check_if_non_working_day,
     op_kwargs={
-        "file": SUNDAYS,
+        "file": f"{CURATED_PATH}/non_working_days.csv",
         "dt": DT
     },
     dag=dag
@@ -368,14 +370,27 @@ get_python_libraries = BashOperator(
 )
 
 
-# CHECK IF SUNDAYS EXIST
-# check_if_sundays_exist = ShortCircuitOperator(
-check_if_sundays_exist = PythonOperator(
-    task_id="t_check_if_sundays_exist",
+# # CHECK IF SUNDAYS EXISTS
+# # check_if_sundays_exists = ShortCircuitOperator(
+# check_if_sundays_exists = PythonOperator(
+#     task_id="t_check_if_sundays_exists",
+#     provide_context=False,
+#     python_callable=check_if_files_exists,
+#     op_kwargs={
+#         "file": HOLIDAYS_PL
+#     },
+#     dag=dag
+# )
+
+
+# CHECK IF SUNDAYS EXISTS
+# check_if_excursions_exist = ShortCircuitOperator(
+check_if_excursions_exists = PythonOperator(
+    task_id="t_check_if_excursions_exists",
     provide_context=False,
-    python_callable=check_if_files_exist,
+    python_callable=check_if_files_exists,
     op_kwargs={
-        "file": HOLIDAYS_PL
+        "file": EXCURSIONS
     },
     dag=dag
 )
@@ -383,23 +398,23 @@ check_if_sundays_exist = PythonOperator(
 
 # CHECK IF HOLIDAYS_PL EXIST
 # check_if_holidays_pl_exist = ShortCircuitOperator(
-check_if_holidays_pl_exist = PythonOperator(
-    task_id="t_check_if_holidays_pl_exist",
+check_if_non_working_days_exists = PythonOperator(
+    task_id="t_check_if_non_working_days_exists",
     provide_context=False,
-    python_callable=check_if_files_exist,
+    python_callable=check_if_files_exists,
     op_kwargs={
-        "file": HOLIDAYS_PL
+        "file": NON_WORKING_DAYS
     },
     dag=dag
 )
 
 
 # CHECK IF NBP_RATES EXIST
-# check_if_nbp_exchange_rates_exist = ShortCircuitOperator(
-check_if_nbp_exchange_rates_exist = PythonOperator(
-    task_id="t_check_if_nbp_exchange_rates_exist",
+# check_if_nbp_exchange_rates_exists = ShortCircuitOperator(
+check_if_nbp_exchange_rates_exists = PythonOperator(
+    task_id="t_check_if_nbp_exchange_rates_exists",
     provide_context=False,
-    python_callable=check_if_files_exist,
+    python_callable=check_if_files_exists,
     op_kwargs={
         "file": NBP_EXCHANGE_RATES
     },
@@ -409,16 +424,16 @@ check_if_nbp_exchange_rates_exist = PythonOperator(
 
 
 # DUMMY TASK DOING NOTHING
-check_if_sunday_failed = DummyOperator(
-    task_id="check_if_sunday_failed",
+check_if_non_working_day_failed = DummyOperator(
+    task_id="check_if_non_working_day_failed",
     trigger_rule='all_failed',
     dag=dag
 )
 
 
 # DUMMY TASK DOING NOTHING
-check_if_sunday_success = DummyOperator(
-    task_id="check_if_sunday_success",
+check_if_non_working_day_success = DummyOperator(
+    task_id="check_if_non_working_day_success",
     trigger_rule='all_success',
     dag=dag
 )
@@ -478,18 +493,18 @@ get_non_working_days = PythonOperator(
 
 
 
-# GET NBP RATES
-get_nbp_rates = PythonOperator(
-    task_id="t_get_nbp_rates",
-    python_callable=get_nbp_rates,
-    op_kwargs={
-        'ingest_path': INGEST_PATH,
-        'years': YEARS,
-        'yesterday': YESTERDAY,
-        'currency_codes': CURRENCY_CODES
-    },
-    dag=dag
-)
+# # GET NBP RATES
+# get_nbp_rates = PythonOperator(
+#     task_id="t_get_nbp_rates",
+#     python_callable=get_nbp_rates,
+#     op_kwargs={
+#         'ingest_path': INGEST_PATH,
+#         'years': YEARS,
+#         'yesterday': YESTERDAY,
+#         'currency_codes': CURRENCY_CODES
+#     },
+#     dag=dag
+# )
 
 get_latest_exchange_rates = DummyOperator(
     task_id="t_get_latest_exchange_rates",
@@ -521,13 +536,13 @@ get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_pa
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
 get_setup_business_dt >> [get_holidays_pl, get_sundays]
 [get_holidays_pl, get_sundays] >> get_non_working_days
-get_non_working_days >> check_if_sunday
-check_if_sunday >> check_if_sunday_failed
-check_if_sunday_failed >> get_end_datetime
-check_if_sunday >> check_if_sunday_success >> get_python_libraries
-get_python_libraries >> [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist]
-[check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
-[check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_all_success
+get_non_working_days >> check_if_non_working_day
+check_if_non_working_day >> check_if_non_working_day_failed
+check_if_non_working_day_failed >> get_end_datetime
+check_if_non_working_day >> check_if_non_working_day_success >> get_python_libraries
+get_python_libraries >> [check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists]
+[check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists] >> check_one_failed
+[check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists] >> check_all_success
 
 
 
@@ -539,7 +554,7 @@ get_python_libraries >> [check_if_sundays_exist, check_if_holidays_pl_exist, che
 # [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
 #
 # check_one_failed >> [get_holidays_pl, get_sundays]
-check_one_failed >> get_nbp_rates
+check_one_failed >> get_end_datetime
 #
 # [get_holidays_pl, get_sundays] >> get_non_working_days
 # get_non_working_days >> get_latest_exchange_rates
