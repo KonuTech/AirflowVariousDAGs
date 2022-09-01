@@ -47,7 +47,7 @@ PROCESSING_DTTM_DICT = {"processing_dttm": '{{ ti.xcom_pull(task_ids="setup_proc
 DT = '{{ ti.xcom_pull(task_ids="setup_business_dt", key="return_value") }}'
 DT_MINUS_ONE = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-%d") }}'
 # BUSINESS_DT_DICT = {"dt": '{{ ti.xcom_pull(task_ids="setup_business_dt", key="return_value") }}'}
-# DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
+DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
 # DT_END_MACRO = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-%d") }}'
 
 CURRENCY_CODES = ['CZK', 'EUR', 'GBP', 'HUF', 'RUB', 'USD']
@@ -88,7 +88,7 @@ def check_if_non_working_day(file, dt):
     #
     # output.to_csv(f'{file}', index=False)
 
-    print("\nDT:", "2022-09-01")
+    # print("\nDT:", "2022-09-01")
     print("\nDT:", dt)
     # TEST SUNDAYS:"
     # dt = "2019-06-09"
@@ -231,37 +231,61 @@ def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
     output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
 
 
-def get_latest_exchange_rates(ingest_path, currency_codes, dt_minus_one):
+def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_one):
     """
     :param ingest_path:
     :param currency_codes:
     :param dt_minus_one:
     :return:
     """
-    time.sleep(60)
-    output = pd.DataFrame()
-    for currency_code in currency_codes:
-        if currency_code != 'RUB':
-            print(currency_code)
-            try:
-                print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
-                json_norm = json_normalize(respond)
-                json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                json_norm['exchange_rate'] = currency_code
-                print(json_norm)
-                output = pd.concat([output, json_norm], ignore_index=True)
-            except Exception:
-                print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
-                json_norm = json_normalize(respond)
-                json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                json_norm['exchange_rate'] = currency_code
-                print(json_norm)
-                output = pd.concat([output, json_norm], ignore_index=True)
 
-    output.drop_duplicates(inplace=True)
-    output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
+    print(dt)
+    day_number = pd.to_datetime(dt).weekday()
+    if day_number >= 5: # 5 Saturday, 6 Sununday
+        print("Weekend - Do nothing. Week Number: ", day_number)
+        exit()
+
+    elif day_number == 0: # 0 Monday
+        print("Monday - Get Exchange rates from Friday or Earlier if Holiday. Week Number: ", day_number)
+
+        # time.sleep(60)
+        df = pd.read_csv(file)
+        print(df)
+        # dt_minus_one_dttm = pd.to_datetime(dt_minus_one)
+        if dt_minus_one in sorted(set(df['date'])):
+            print("jest: ", dt_minus_one)
+            print(df[df['date'] == dt_minus_one])
+        else:
+            print("nie ma: ", dt_minus_one)
+
+
+    else:
+        print("Weekday- Get Exchange rates from T-1. Week Number: ", day_number)
+
+        time.sleep(60)
+        output = pd.DataFrame()
+        for currency_code in currency_codes:
+            if currency_code != 'RUB':
+                print(currency_code)
+                try:
+                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                    json_norm = json_normalize(respond)
+                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                    json_norm['exchange_rate'] = currency_code
+                    print(json_norm)
+                    output = pd.concat([output, json_norm], ignore_index=True)
+                except Exception:
+                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                    json_norm = json_normalize(respond)
+                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                    json_norm['exchange_rate'] = currency_code
+                    print(json_norm)
+                    output = pd.concat([output, json_norm], ignore_index=True)
+
+        output.drop_duplicates(inplace=True)
+        output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
 
 
 def append_latest_exchange_rate(ingest_path, nbp_exchange_rates, nbp_exchange_rates_latest):
@@ -391,7 +415,7 @@ check_if_non_working_day = PythonOperator(
     python_callable=check_if_non_working_day,
     op_kwargs={
         "file": f"{CURATED_PATH}/non_working_days.csv",
-        "dt": DT
+        "dt": DT_MACRO
     },
     dag=dag
 )
@@ -617,7 +641,9 @@ get_latest_exchange_rates = PythonOperator(
     python_callable=get_latest_exchange_rates,
     op_kwargs={
         'ingest_path': INGEST_PATH,
+        "file": f"{CURATED_PATH}/non_working_days.csv",
         'currency_codes': CURRENCY_CODES,
+        'dt': DT_MACRO,
         'dt_minus_one': DT_MINUS_ONE
     },
     trigger_rule='one_success',
