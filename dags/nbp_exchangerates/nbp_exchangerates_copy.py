@@ -72,7 +72,7 @@ def setup_business_dt(**kwargs):
     return dt
 
 
-def check_if_working_day(file, dt):
+def check_if_non_working_day(file, dt):
     """
     :param ingest_path:
     :param years:
@@ -98,9 +98,9 @@ def check_if_working_day(file, dt):
     print(df)
 
     if dt in sorted(set(df['date'])):
-        print("WORKDAY: NOT SUNDAY. MOVING THE PROCESS ON.")
-    else:
         raise AirflowException("WORKDAY: SUNDAY. STOPPING THE PROCESS NOW.")
+    else:
+        print("WORKDAY: NOT SUNDAY. MOVING THE PROCESS ON.")
 
 
 def check_if_files_exists(file):
@@ -116,7 +116,7 @@ def check_if_files_exists(file):
 
 
 # Get dated for Polish holidays
-def get_working_days(ingest_path, years):
+def get_holidays_pl(ingest_path, years):
     """
     :param years:
     :param ingest_path:
@@ -152,50 +152,46 @@ def get_working_days(ingest_path, years):
         output = output.drop(columns='year_id')
         output['date'] = pd.to_datetime(output['date'])
 
-    working_days = pd.DataFrame(
-        pd.bdate_range(start='1/1/2019', end='1/1/2023', holidays=list(output['date']), weekmask="Mon Tue Wed Thu Fri",
-                       freq='C'), columns=['date'])
-
-    working_days.drop_duplicates(inplace=True)
-    working_days.to_csv(f'{ingest_path}/working_days.csv', index=False)
+    output.drop_duplicates(inplace=True)
+    output.to_csv(f'{ingest_path}/holidays_pl.csv', index=False)
 
 
-# def get_sundays(ingest_path, years):
-#     """
-#     :param years:
-#     :param ingest_path:
-#     :return:
-#     """
-#
-#     before = datetime(min(years), 1, 1)
-#     after = datetime(max(years), 12, 31)
-#     rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
-#
-#     output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
-#     output['holiday'] = 'Sunday'
-#
-#     output.drop_duplicates(inplace=True)
-#     output.to_csv(f'{ingest_path}/sundays.csv', index=False)
+def get_sundays(ingest_path, years):
+    """
+    :param years:
+    :param ingest_path:
+    :return:
+    """
+
+    before = datetime(min(years), 1, 1)
+    after = datetime(max(years), 12, 31)
+    rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
+
+    output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
+    output['holiday'] = 'Sunday'
+
+    output.drop_duplicates(inplace=True)
+    output.to_csv(f'{ingest_path}/sundays.csv', index=False)
 
 
-# def get_non_working_days(sundays, holidays_pl, curated_path):
-#     """
-#     :param sundays:
-#     :param holidays_pl:
-#     :param curated_path:
-#     :return:
-#     """
-#     df_1 = pd.read_csv(sundays)
-#     print(df_1.shape)
-#     df_2 = pd.read_csv(holidays_pl)
-#     print(df_2.shape)
-#     output = pd.concat([df_1, df_2], ignore_index=True)
-#     output.drop_duplicates(inplace=True)
-#     print(output.shape)
-#     print(output)
-#
-#     output.drop_duplicates(inplace=True)
-#     output.to_csv(f'{curated_path}/non_working_days.csv', index=False)
+def get_non_working_days(sundays, holidays_pl, curated_path):
+    """
+    :param sundays:
+    :param holidays_pl:
+    :param curated_path:
+    :return:
+    """
+    df_1 = pd.read_csv(sundays)
+    print(df_1.shape)
+    df_2 = pd.read_csv(holidays_pl)
+    print(df_2.shape)
+    output = pd.concat([df_1, df_2], ignore_index=True)
+    output.drop_duplicates(inplace=True)
+    print(output.shape)
+    print(output)
+
+    output.drop_duplicates(inplace=True)
+    output.to_csv(f'{curated_path}/non_working_days.csv', index=False)
 
 
 def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
@@ -363,7 +359,7 @@ default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
     "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
-    # "start_date": datetime(2019, 6, 5),
+    "start_date": datetime(2019, 6, 5),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -374,7 +370,7 @@ default_args = {
 
 
 dag = DAG(
-    dag_id="nbp_exchangerates",
+    dag_id="nbp_exchangerates_copy",
     description="Assessment Task",
     schedule_interval="0 17 * * 1-5",
     default_args=default_args,
@@ -413,12 +409,12 @@ get_setup_business_dt = PythonOperator(
 )
 
 # Check if today is Sunday
-check_if_working_day = PythonOperator(
-    task_id="t_check_if_working_day",
+check_if_non_working_day = PythonOperator(
+    task_id="t_check_if_non_working_day",
     provide_context=False,
-    python_callable=check_if_working_day,
+    python_callable=check_if_non_working_day,
     op_kwargs={
-        "file": f"{CURATED_PATH}/working_days.csv",
+        "file": f"{CURATED_PATH}/non_working_days.csv",
         "dt": DT_MACRO
     },
     dag=dag
@@ -590,9 +586,9 @@ check_all_success = DummyOperator(
 
 
 # GET POLISH HOLIDAYS
-get_working_days = PythonOperator(
-    task_id="t_get_working_days",
-    python_callable=get_working_days,
+get_holidays_pl = PythonOperator(
+    task_id="t_get_holidays_pl",
+    python_callable=get_holidays_pl,
     op_kwargs={
         'ingest_path': INGEST_PATH,
         'years': YEARS
@@ -601,29 +597,29 @@ get_working_days = PythonOperator(
 )
 
 
-# # GET SUNDAYS
-# get_sundays = PythonOperator(
-#     task_id="t_get_sundays",
-#     python_callable=get_sundays,
-#     op_kwargs={
-#         'ingest_path': INGEST_PATH,
-#         'years': YEARS
-#     },
-#     dag=dag
-# )
+# GET SUNDAYS
+get_sundays = PythonOperator(
+    task_id="t_get_sundays",
+    python_callable=get_sundays,
+    op_kwargs={
+        'ingest_path': INGEST_PATH,
+        'years': YEARS
+    },
+    dag=dag
+)
 
 
-# get_non_working_days = PythonOperator(
-#     task_id="t_get_non_working_days",
-#     python_callable=get_non_working_days,
-#     op_kwargs={
-#         'sundays': SUNDAYS,
-#         'holidays_pl': HOLIDAYS_PL,
-#         'curated_path': CURATED_PATH
-#     },
-#     trigger_rule='one_success',
-#     dag=dag
-# )
+get_non_working_days = PythonOperator(
+    task_id="t_get_non_working_days",
+    python_callable=get_non_working_days,
+    op_kwargs={
+        'sundays': SUNDAYS,
+        'holidays_pl': HOLIDAYS_PL,
+        'curated_path': CURATED_PATH
+    },
+    trigger_rule='one_success',
+    dag=dag
+)
 
 
 
@@ -714,11 +710,12 @@ get_end_datetime = BashOperator(
 
 get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
-get_setup_business_dt >> get_working_days
-get_working_days >> check_if_working_day
-check_if_working_day >> check_if_non_working_day_failed
+get_setup_business_dt >> [get_holidays_pl, get_sundays]
+[get_holidays_pl, get_sundays] >> get_non_working_days
+get_non_working_days >> check_if_non_working_day
+check_if_non_working_day >> check_if_non_working_day_failed
 check_if_non_working_day_failed >> get_end_datetime
-check_if_working_day >> check_if_non_working_day_success >> get_python_libraries
+check_if_non_working_day >> check_if_non_working_day_success >> get_python_libraries
 get_python_libraries >> [check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists]
 [check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists] >> check_one_failed
 [check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists] >> check_all_success

@@ -72,7 +72,7 @@ def setup_business_dt(**kwargs):
     return dt
 
 
-def check_if_non_working_day(file, dt):
+def check_if_working_day(file, dt):
     """
     :param ingest_path:
     :param years:
@@ -98,9 +98,9 @@ def check_if_non_working_day(file, dt):
     print(df)
 
     if dt in sorted(set(df['date'])):
-        raise AirflowException("WORKDAY: SUNDAY. STOPPING THE PROCESS NOW.")
-    else:
         print("WORKDAY: NOT SUNDAY. MOVING THE PROCESS ON.")
+    else:
+        raise AirflowException("WORKDAY: SUNDAY. STOPPING THE PROCESS NOW.")
 
 
 def check_if_files_exists(file):
@@ -116,7 +116,7 @@ def check_if_files_exists(file):
 
 
 # Get dated for Polish holidays
-def get_holidays_pl(ingest_path, years):
+def get_working_days(ingest_path, years):
     """
     :param years:
     :param ingest_path:
@@ -152,46 +152,50 @@ def get_holidays_pl(ingest_path, years):
         output = output.drop(columns='year_id')
         output['date'] = pd.to_datetime(output['date'])
 
-    output.drop_duplicates(inplace=True)
-    output.to_csv(f'{ingest_path}/holidays_pl.csv', index=False)
+    working_days = pd.DataFrame(
+        pd.bdate_range(start='1/1/2019', end='1/1/2023', holidays=list(output['date']), weekmask="Mon Tue Wed Thu Fri",
+                       freq='C'), columns=['date'])
+
+    working_days.drop_duplicates(inplace=True)
+    working_days.to_csv(f'{ingest_path}/working_days.csv', index=False)
 
 
-def get_sundays(ingest_path, years):
-    """
-    :param years:
-    :param ingest_path:
-    :return:
-    """
+# def get_sundays(ingest_path, years):
+#     """
+#     :param years:
+#     :param ingest_path:
+#     :return:
+#     """
+#
+#     before = datetime(min(years), 1, 1)
+#     after = datetime(max(years), 12, 31)
+#     rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
+#
+#     output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
+#     output['holiday'] = 'Sunday'
+#
+#     output.drop_duplicates(inplace=True)
+#     output.to_csv(f'{ingest_path}/sundays.csv', index=False)
 
-    before = datetime(min(years), 1, 1)
-    after = datetime(max(years), 12, 31)
-    rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
 
-    output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
-    output['holiday'] = 'Sunday'
-
-    output.drop_duplicates(inplace=True)
-    output.to_csv(f'{ingest_path}/sundays.csv', index=False)
-
-
-def get_non_working_days(sundays, holidays_pl, curated_path):
-    """
-    :param sundays:
-    :param holidays_pl:
-    :param curated_path:
-    :return:
-    """
-    df_1 = pd.read_csv(sundays)
-    print(df_1.shape)
-    df_2 = pd.read_csv(holidays_pl)
-    print(df_2.shape)
-    output = pd.concat([df_1, df_2], ignore_index=True)
-    output.drop_duplicates(inplace=True)
-    print(output.shape)
-    print(output)
-
-    output.drop_duplicates(inplace=True)
-    output.to_csv(f'{curated_path}/non_working_days.csv', index=False)
+# def get_non_working_days(sundays, holidays_pl, curated_path):
+#     """
+#     :param sundays:
+#     :param holidays_pl:
+#     :param curated_path:
+#     :return:
+#     """
+#     df_1 = pd.read_csv(sundays)
+#     print(df_1.shape)
+#     df_2 = pd.read_csv(holidays_pl)
+#     print(df_2.shape)
+#     output = pd.concat([df_1, df_2], ignore_index=True)
+#     output.drop_duplicates(inplace=True)
+#     print(output.shape)
+#     print(output)
+#
+#     output.drop_duplicates(inplace=True)
+#     output.to_csv(f'{curated_path}/non_working_days.csv', index=False)
 
 
 def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
@@ -249,14 +253,50 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
         print("Monday - Get Exchange rates from Friday or Earlier if Holiday. Week Number: ", day_number)
 
         # time.sleep(60)
-        df = pd.read_csv(file)
+        df = pd.read_csv(file, infer_datetime_format=True)
+        df['date'] = df['date'].astype('datetime64[ns]')
+        print(df.info())
         print(df)
         # dt_minus_one_dttm = pd.to_datetime(dt_minus_one)
         if dt_minus_one in sorted(set(df['date'])):
             print("jest: ", dt_minus_one)
             print(df[df['date'] == dt_minus_one])
         else:
-            print("nie ma: ", dt_minus_one)
+            print("nie ma podanej daty jako Working Date: ", dt_minus_one)
+            print("pierwszy poprzedni Working Day:")
+            print(df[df['date'] < dt_minus_one])
+            wczesniejsze_dni = df[df['date'] < dt_minus_one]
+            print(wczesniejsze_dni.info())
+            print('value dla maks indeksu:')
+            print(wczesniejsze_dni.loc[wczesniejsze_dni['date'].idxmax()][0])
+
+            previous_working_day = (wczesniejsze_dni.loc[wczesniejsze_dni['date'].idxmax()][0]).strftime("%Y-%m-%d")
+            print("previous_working_day: ", previous_working_day)
+
+            time.sleep(60)
+            output = pd.DataFrame()
+            for currency_code in currency_codes:
+                if currency_code != 'RUB':
+                    print(currency_code)
+                    try:
+                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
+                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                        json_norm = json_normalize(respond)
+                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                        json_norm['exchange_rate'] = currency_code
+                        print(json_norm)
+                        output = pd.concat([output, json_norm], ignore_index=True)
+                    except Exception:
+                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
+                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                        json_norm = json_normalize(respond)
+                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                        json_norm['exchange_rate'] = currency_code
+                        print(json_norm)
+                        output = pd.concat([output, json_norm], ignore_index=True)
+
+            output.drop_duplicates(inplace=True)
+            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
 
 
     else:
@@ -287,7 +327,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
         output.drop_duplicates(inplace=True)
         output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
 
-
+# Append do schema
 def append_latest_exchange_rate(ingest_path, nbp_exchange_rates, nbp_exchange_rates_latest):
     """
     :param ingest_path:
@@ -358,8 +398,8 @@ def calculate_values(curated_path, business_ready_path):
 default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
-    "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
-    "start_date": datetime(2019, 6, 5),
+    # "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
+    "start_date": datetime(2022, 8, 26),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -409,12 +449,12 @@ get_setup_business_dt = PythonOperator(
 )
 
 # Check if today is Sunday
-check_if_non_working_day = PythonOperator(
-    task_id="t_check_if_non_working_day",
+check_if_working_day = PythonOperator(
+    task_id="t_check_if_working_day",
     provide_context=False,
-    python_callable=check_if_non_working_day,
+    python_callable=check_if_working_day,
     op_kwargs={
-        "file": f"{CURATED_PATH}/non_working_days.csv",
+        "file": f"{INGEST_PATH}/working_days.csv",
         "dt": DT_MACRO
     },
     dag=dag
@@ -476,7 +516,7 @@ get_curated_path = BashOperator(
 
 # CREATE BUSINESS READY PATH IN NOT EXISTS
 get_business_ready_path = BashOperator(
-    task_id="t_get_output_path",
+    task_id="t_get_business_ready_path",
     bash_command=
     f"""
     echo 'CREATING BUSINESS READY DIRECTORY IF NOT EXISTS: ';
@@ -526,17 +566,17 @@ check_if_excursions_exists = PythonOperator(
 )
 
 
-# CHECK IF HOLIDAYS_PL EXIST
-# check_if_holidays_pl_exist = ShortCircuitOperator(
-check_if_non_working_days_exists = PythonOperator(
-    task_id="t_check_if_non_working_days_exists",
-    provide_context=False,
-    python_callable=check_if_files_exists,
-    op_kwargs={
-        "file": NON_WORKING_DAYS
-    },
-    dag=dag
-)
+# # CHECK IF HOLIDAYS_PL EXIST
+# # check_if_holidays_pl_exist = ShortCircuitOperator(
+# check_if_non_working_days_exists = PythonOperator(
+#     task_id="t_check_if_non_working_days_exists",
+#     provide_context=False,
+#     python_callable=check_if_files_exists,
+#     op_kwargs={
+#         "file": NON_WORKING_DAYS
+#     },
+#     dag=dag
+# )
 
 
 # CHECK IF NBP_RATES EXIST
@@ -586,9 +626,9 @@ check_all_success = DummyOperator(
 
 
 # GET POLISH HOLIDAYS
-get_holidays_pl = PythonOperator(
-    task_id="t_get_holidays_pl",
-    python_callable=get_holidays_pl,
+get_working_days = PythonOperator(
+    task_id="t_get_working_days",
+    python_callable=get_working_days,
     op_kwargs={
         'ingest_path': INGEST_PATH,
         'years': YEARS
@@ -597,29 +637,29 @@ get_holidays_pl = PythonOperator(
 )
 
 
-# GET SUNDAYS
-get_sundays = PythonOperator(
-    task_id="t_get_sundays",
-    python_callable=get_sundays,
-    op_kwargs={
-        'ingest_path': INGEST_PATH,
-        'years': YEARS
-    },
-    dag=dag
-)
+# # GET SUNDAYS
+# get_sundays = PythonOperator(
+#     task_id="t_get_sundays",
+#     python_callable=get_sundays,
+#     op_kwargs={
+#         'ingest_path': INGEST_PATH,
+#         'years': YEARS
+#     },
+#     dag=dag
+# )
 
 
-get_non_working_days = PythonOperator(
-    task_id="t_get_non_working_days",
-    python_callable=get_non_working_days,
-    op_kwargs={
-        'sundays': SUNDAYS,
-        'holidays_pl': HOLIDAYS_PL,
-        'curated_path': CURATED_PATH
-    },
-    trigger_rule='one_success',
-    dag=dag
-)
+# get_non_working_days = PythonOperator(
+#     task_id="t_get_non_working_days",
+#     python_callable=get_non_working_days,
+#     op_kwargs={
+#         'sundays': SUNDAYS,
+#         'holidays_pl': HOLIDAYS_PL,
+#         'curated_path': CURATED_PATH
+#     },
+#     trigger_rule='one_success',
+#     dag=dag
+# )
 
 
 
@@ -641,7 +681,7 @@ get_latest_exchange_rates = PythonOperator(
     python_callable=get_latest_exchange_rates,
     op_kwargs={
         'ingest_path': INGEST_PATH,
-        "file": f"{CURATED_PATH}/non_working_days.csv",
+        "file": f"{INGEST_PATH}/working_days.csv",
         'currency_codes': CURRENCY_CODES,
         'dt': DT_MACRO,
         'dt_minus_one': DT_MINUS_ONE
@@ -710,15 +750,14 @@ get_end_datetime = BashOperator(
 
 get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
-get_setup_business_dt >> [get_holidays_pl, get_sundays]
-[get_holidays_pl, get_sundays] >> get_non_working_days
-get_non_working_days >> check_if_non_working_day
-check_if_non_working_day >> check_if_non_working_day_failed
+get_setup_business_dt >> get_working_days
+get_working_days >> check_if_working_day
+check_if_working_day >> check_if_non_working_day_failed
 check_if_non_working_day_failed >> get_end_datetime
-check_if_non_working_day >> check_if_non_working_day_success >> get_python_libraries
-get_python_libraries >> [check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists]
-[check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists] >> check_one_failed
-[check_if_excursions_exists, check_if_non_working_days_exists, check_if_nbp_exchange_rates_exists] >> check_all_success
+check_if_working_day >> check_if_non_working_day_success >> get_python_libraries
+get_python_libraries >> [check_if_excursions_exists, check_if_nbp_exchange_rates_exists]
+[check_if_excursions_exists, check_if_nbp_exchange_rates_exists] >> check_one_failed
+[check_if_excursions_exists, check_if_nbp_exchange_rates_exists] >> check_all_success
 
 
 
