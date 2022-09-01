@@ -279,8 +279,6 @@ get_nbp_rates = PythonOperator(
 )
 
 
-
-
 # GET DATE TIME OF FINISHED DAG
 get_end_datetime = BashOperator(
     task_id="t_get_end_datetime",
