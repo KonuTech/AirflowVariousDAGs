@@ -152,6 +152,7 @@ def get_holidays_pl(ingest_path, years):
         output = output.drop(columns='year_id')
         output['date'] = pd.to_datetime(output['date'])
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{ingest_path}/holidays_pl.csv', index=False)
 
 
@@ -169,6 +170,7 @@ def get_sundays(ingest_path, years):
     output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
     output['holiday'] = 'Sunday'
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{ingest_path}/sundays.csv', index=False)
 
 
@@ -188,6 +190,7 @@ def get_non_working_days(sundays, holidays_pl, curated_path):
     print(output.shape)
     print(output)
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{curated_path}/non_working_days.csv', index=False)
 
 
@@ -224,6 +227,7 @@ def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
                 output = pd.concat([output, json_norm], ignore_index=True)
                 time.sleep(60)
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
 
 
@@ -256,6 +260,7 @@ def get_latest_exchange_rates(ingest_path, currency_codes, dt_minus_one):
                 print(json_norm)
                 output = pd.concat([output, json_norm], ignore_index=True)
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
 
 
@@ -275,6 +280,7 @@ def append_latest_exchange_rate(ingest_path, nbp_exchange_rates, nbp_exchange_ra
     print(output.shape)
     print(output)
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
 
 
@@ -298,6 +304,7 @@ def merge_exchange_rates(curated_path, excursions, nbp_exchange_rates):
         right_on=['effectiveDate', 'exchange_rate']
     )
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{curated_path}/nbp_exchangerates.csv', index=False)
 
 
@@ -317,6 +324,7 @@ def calculate_values(curated_path, business_ready_path):
     new_cols = [col for col in df_1.columns if col != 'SP_ExchangeRate'] + ['SP_ExchangeRate']
     output = df_1[new_cols]
 
+    output.drop_duplicates(inplace=True)
     output.to_csv(f'{business_ready_path}/nbp_exchangerates.csv', index=False)
 
 
