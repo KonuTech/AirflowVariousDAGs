@@ -4,7 +4,9 @@
 
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.python_operator import PythonOperator, ShortCircuitOperator
+from airflow.operators.dummy_operator import DummyOperator
+# from airflow.operators.weekday import BranchDayOfWeekOperator
 from datetime import date, datetime, timedelta
 from dateutil.relativedelta import *
 import dateutil.rrule as rrule
@@ -13,6 +15,7 @@ import pandas as pd
 from pandas.io.json import json_normalize
 import requests
 import time
+import os
 
 ###############################################################
 # Parameters
@@ -21,6 +24,9 @@ SPARK_MASTER = "spark://spark:7077"
 ROOT_PATH_DAG = "/usr/local/airflow/dags/nbp_exchangerates"
 TRANSFER_PATH = f"{ROOT_PATH_DAG}/transfer"
 INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
+HOLIDAYS_PL = f"{INGEST_PATH}/holidays_pl.csv"
+NBP_EXCHANGE_RATES = f"{INGEST_PATH}/nbp_exchangerates.csv"
+SUNDAYS = f"{INGEST_PATH}/sundays.csv"
 CURATED_PATH = f"{ROOT_PATH_DAG}/curated"
 BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
 SCRIPTS_PATH = f"{ROOT_PATH_DAG}/scritps"
@@ -32,11 +38,20 @@ YESTERDAY = TODAY - timedelta(days=1)
 YEARS = range(2019, 2023)
 
 CURRENCY_CODES = ['CZK', 'EUR', 'GBP', 'HUF', 'RUB', 'USD']
+# FILES = [HOLIDAYS_PL, NBP_EXCHANGE_RATES, SUNDAYS]
 
 ###############################################################
 # Python Functions
 ###############################################################
+def get_check_if_files_exist(file):
+    """
+    :param files:
+    :return:
+    """
+    if os.path.exists(file):
+        print(True)
 
+    return False
 
 # Get dated for Polish holidays
 def get_holidays_pl(ingest_path, years):
@@ -137,29 +152,31 @@ def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
 # DAG Definition
 ###############################################################
 default_args = {
-    "owner": "dummy_name",
+    "owner": "Konrad Borowiec",
     "depends_on_past": False,
     "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
     "retries": 0,
-    "retry_delay": timedelta(minutes=5)
+    "retry_delay": timedelta(minutes=5),
+    "tags": ['nbp','exchange rats', 'assessment task']
 }
 
 
 dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
-    schedule_interval="@daily",
-    default_args=default_args
+    schedule_interval="0 2 * * 1-6",
+    default_args=default_args,
+
 )
 
 
 ###############################################################
 # Tasks
 ###############################################################
-# GET DATE TIME OF FINISHED DAG
+# GET DATE TIME OF STARTED DAG
 get_start_datetime = BashOperator(
     task_id="t_get_start_datetime",
     bash_command="""
@@ -169,6 +186,14 @@ get_start_datetime = BashOperator(
     """,
     dag=dag
 )
+
+# # GET WEEKDAY
+# get_weekday = BranchDayOfWeekOperator(
+#     task_id="t_get_weekday",
+#     follow_task_ids_if_true="t_get_transfer_path",
+#     follow_task_ids_if_false="t_get_end_datetime",
+#     week_day="Sunday",
+# )
 
 
 # CREATE TRANSFER PATH IN NOT EXISTS
@@ -241,6 +266,49 @@ get_python_libraries = BashOperator(
 )
 
 
+# CHECK IF SUNDAYS EXIST
+get_check_if_sundays_exist = ShortCircuitOperator(
+    task_id="t_get_check_if_sundays_exist",
+    provide_context=False,
+    python_callable=get_check_if_files_exist,
+    op_kwargs={
+        "file": HOLIDAYS_PL
+    },
+    dag=dag
+)
+
+
+# CHECK IF HOLIDAYS_PL EXIST
+get_check_if_holidays_pl_exist = ShortCircuitOperator(
+    task_id="t_get_check_if_holidays_pl_exist",
+    provide_context=False,
+    python_callable=get_check_if_files_exist,
+    op_kwargs={
+        "file": HOLIDAYS_PL
+    },
+    dag=dag
+)
+
+
+# CHECK IF NBP_RATES EXIST
+get_check_if_nbp_exchange_rates_exist = ShortCircuitOperator(
+    task_id="t_get_check_if_nbp_exchange_rates_exist",
+    provide_context=False,
+    python_callable=get_check_if_files_exist,
+    op_kwargs={
+        "file": NBP_EXCHANGE_RATES
+    },
+    dag=dag
+)
+
+
+# DUMMY TASK DOING NOTHING
+get_task_connector_doing_nothing = DummyOperator(
+    task_id="task_connector_doing_nothing",
+    dag=dag
+)
+
+
 # GET POLISH HOLIDAYS
 get_holidays_pl = PythonOperator(
     task_id="t_get_holidays_pl",
@@ -290,10 +358,15 @@ get_end_datetime = BashOperator(
     dag=dag
 )
 
+
 ###############################################################
 # Defining Tasks relations
 ###############################################################
 get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_python_libraries
-get_python_libraries >> [get_holidays_pl, get_sundays, get_nbp_rates]
+get_python_libraries >> [get_check_if_sundays_exist, get_check_if_holidays_pl_exist,
+                         get_check_if_nbp_exchange_rates_exist]
+[get_check_if_sundays_exist, get_check_if_holidays_pl_exist,
+ get_check_if_nbp_exchange_rates_exist] >> get_task_connector_doing_nothing
+get_task_connector_doing_nothing >> [get_holidays_pl, get_sundays, get_nbp_rates]
 [get_holidays_pl, get_sundays, get_nbp_rates] >> get_end_datetime
