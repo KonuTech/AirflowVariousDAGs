@@ -335,7 +335,7 @@ default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
     "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
-    "start_date": datetime(2022, 8, 27),
+    "start_date": datetime(2019, 6, 5),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
