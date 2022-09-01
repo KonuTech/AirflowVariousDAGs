@@ -293,12 +293,7 @@ get_end_datetime = BashOperator(
 ###############################################################
 # Defining Tasks relations
 ###############################################################
-get_start_datetime >> get_transfer_path
-get_transfer_path >> get_ingest_path
-get_ingest_path >> get_curated_path
-get_curated_path >> get_business_ready_path
-get_business_ready_path >> get_python_libraries
-get_python_libraries >> get_holidays_pl
-get_holidays_pl >> get_sundays
-get_sundays >> get_nbp_rates
-get_nbp_rates >> get_end_datetime
+get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
+[get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_python_libraries
+get_python_libraries >> [get_holidays_pl, get_sundays, get_nbp_rates]
+[get_holidays_pl, get_sundays, get_nbp_rates] >> get_end_datetime
