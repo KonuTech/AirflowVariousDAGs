@@ -399,8 +399,8 @@ default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
     # "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
-    # "start_date": datetime(2022, 8, 26),
-    "start_date": datetime(2019, 6, 5),
+    "start_date": datetime(2022, 8, 26),
+    # "start_date": datetime(2019, 6, 5),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -414,8 +414,7 @@ dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
     schedule_interval="0 1 * * 1-5",
-    default_args=default_args,
-
+    default_args=default_args
 )
 
 
