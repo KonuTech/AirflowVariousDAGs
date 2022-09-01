@@ -68,21 +68,21 @@ def setup_business_dt(**kwargs):
     dt = (kwargs.get("execution_date", None)).strftime('%Y%m%d')
     return dt
 
-def check_if_sunday(file, years, dt):
+def check_if_sunday(file, dt):
     """
     :param ingest_path:
     :param years:
     :param dt:
     :return:
     """
-    before = datetime(min(years), 1, 1)
-    after = datetime(max(years), 12, 31)
-    rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
-
-    output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
-    output['holiday'] = 'Sunday'
-
-    output.to_csv(f'{file}', index=False)
+    # before = datetime(min(years), 1, 1)
+    # after = datetime(max(years), 12, 31)
+    # rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
+    #
+    # output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
+    # output['holiday'] = 'Sunday'
+    #
+    # output.to_csv(f'{file}', index=False)
 
     print("\nDT:", "2022-09-01")
     print("\nDT:", dt)
@@ -90,10 +90,10 @@ def check_if_sunday(file, years, dt):
     # dt = "2019-06-09"
     # dt = "2022-08-28"
 
-    # df = pd.read_csv(file)
-    print(output)
+    df = pd.read_csv(file)
+    print(df)
 
-    if dt in sorted(set(output['date'])):
+    if dt in sorted(set(df['date'])):
         raise AirflowException("WORKDAY: SUNDAY. STOPPING THE PROCESS NOW.")
     else:
         print("WORKDAY: NOT SUNDAY. MOVING THE PROCESS ON.")
@@ -283,7 +283,6 @@ check_if_sunday = PythonOperator(
     python_callable=check_if_sunday,
     op_kwargs={
         "file": SUNDAYS,
-        "years": YEARS,
         "dt": DT
     },
     dag=dag
@@ -518,28 +517,36 @@ get_end_datetime = BashOperator(
 # get_start_datetime >> [get_setup_processing_dttm, get_setup_business_dt] >> check_if_sunday
 # [get_setup_processing_dttm, get_setup_business_dt] >> check_if_sunday
 
-get_start_datetime >> get_setup_business_dt
-get_setup_business_dt >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
-[get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> check_if_sunday
-
+get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
+[get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
+get_setup_business_dt >> [get_holidays_pl, get_sundays]
+[get_holidays_pl, get_sundays] >> get_non_working_days
+get_non_working_days >> check_if_sunday
 check_if_sunday >> check_if_sunday_failed
 check_if_sunday_failed >> get_end_datetime
-
-check_if_sunday >> check_if_sunday_success
-check_if_sunday_success >> get_python_libraries
-
+check_if_sunday >> check_if_sunday_success >> get_python_libraries
 get_python_libraries >> [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist]
 [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
-
-check_one_failed >> [get_holidays_pl, get_sundays]
-check_one_failed >> get_nbp_rates
-
-[get_holidays_pl, get_sundays] >> get_non_working_days
-get_non_working_days >> get_latest_exchange_rates
-get_nbp_rates >> get_latest_exchange_rates
-
 [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_all_success
-check_all_success >> get_non_working_days
-check_all_success >> get_latest_exchange_rates
 
+
+
+
+# check_if_sunday >> check_if_sunday_success
+# check_if_sunday_success >> get_python_libraries
+#
+# get_python_libraries >>
+# [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
+#
+# check_one_failed >> [get_holidays_pl, get_sundays]
+check_one_failed >> get_nbp_rates
+#
+# [get_holidays_pl, get_sundays] >> get_non_working_days
+# get_non_working_days >> get_latest_exchange_rates
+# get_nbp_rates >> get_latest_exchange_rates
+#
+# [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_all_success
+# check_all_success >>
+check_all_success >> get_latest_exchange_rates
+#
 get_latest_exchange_rates >> get_end_datetime
