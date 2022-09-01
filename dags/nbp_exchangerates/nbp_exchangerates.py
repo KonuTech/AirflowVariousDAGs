@@ -399,7 +399,8 @@ default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
     # "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
-    "start_date": datetime(2022, 8, 26),
+    # "start_date": datetime(2022, 8, 26),
+    "start_date": datetime(2019, 6, 5),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -412,7 +413,7 @@ default_args = {
 dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
-    schedule_interval="0 17 * * 1-5",
+    schedule_interval="0 1 * * 1-5",
     default_args=default_args,
 
 )
@@ -581,8 +582,8 @@ check_if_excursions_exists = PythonOperator(
 
 # CHECK IF NBP_RATES EXIST
 # check_if_nbp_exchange_rates_exists = ShortCircuitOperator(
-check_if_nbp_exchange_rates_exists = PythonOperator(
-    task_id="t_check_if_nbp_exchange_rates_exists",
+check_if_nbp_exchange_rates_ingest_schema_exists = PythonOperator(
+    task_id="t_check_if_nbp_exchange_rates_ingest_schema_exists",
     provide_context=False,
     python_callable=check_if_files_exists,
     op_kwargs={
@@ -594,16 +595,16 @@ check_if_nbp_exchange_rates_exists = PythonOperator(
 
 
 # DUMMY TASK DOING NOTHING
-check_if_non_working_day_failed = DummyOperator(
-    task_id="check_if_non_working_day_failed",
+check_if_working_day_failed = DummyOperator(
+    task_id="holiday",
     trigger_rule='all_failed',
     dag=dag
 )
 
 
 # DUMMY TASK DOING NOTHING
-check_if_non_working_day_success = DummyOperator(
-    task_id="check_if_non_working_day_success",
+check_if_working_day_success = DummyOperator(
+    task_id="working_day",
     trigger_rule='all_success',
     dag=dag
 )
@@ -748,37 +749,22 @@ get_end_datetime = BashOperator(
 # get_start_datetime >> [get_setup_processing_dttm, get_setup_business_dt] >> check_if_sunday
 # [get_setup_processing_dttm, get_setup_business_dt] >> check_if_sunday
 
-get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
+get_start_datetime >> get_python_libraries
+get_python_libraries>> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
 get_setup_business_dt >> get_working_days
 get_working_days >> check_if_working_day
-check_if_working_day >> check_if_non_working_day_failed
-check_if_non_working_day_failed >> get_end_datetime
-check_if_working_day >> check_if_non_working_day_success >> get_python_libraries
-get_python_libraries >> [check_if_excursions_exists, check_if_nbp_exchange_rates_exists]
-[check_if_excursions_exists, check_if_nbp_exchange_rates_exists] >> check_one_failed
-[check_if_excursions_exists, check_if_nbp_exchange_rates_exists] >> check_all_success
+check_if_working_day >> check_if_working_day_failed
+check_if_working_day_failed >> get_end_datetime
+check_if_working_day >> check_if_working_day_success >> [check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists]
+[check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists] >> check_one_failed
+[check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists] >> check_all_success
 
 
-
-
-# check_if_sunday >> check_if_sunday_success
-# check_if_sunday_success >> get_python_libraries
-#
-# get_python_libraries >>
-# [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
-#
-# check_one_failed >> [get_holidays_pl, get_sundays]
 check_one_failed >> get_end_datetime
-#
-# [get_holidays_pl, get_sundays] >> get_non_working_days
-# get_non_working_days >> get_latest_exchange_rates
-# get_nbp_rates >> get_latest_exchange_rates
-#
-# [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_all_success
-# check_all_success >>
+
 check_all_success >> get_latest_exchange_rates
-#
+
 get_latest_exchange_rates >> append_latest_exchange_rate
 append_latest_exchange_rate >> merge_exchange_rates
 merge_exchange_rates >> calculate_values
