@@ -6,6 +6,7 @@ from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.python_operator import PythonOperator, ShortCircuitOperator
 from airflow.operators.dummy_operator import DummyOperator
+from airflow import AirflowException
 # from airflow.operators.weekday import BranchDayOfWeekOperator
 from datetime import date, datetime, timedelta
 from dateutil.relativedelta import *
@@ -37,21 +38,77 @@ TODAY = date.today()
 YESTERDAY = TODAY - timedelta(days=1)
 YEARS = range(2019, 2023)
 
+# Timestamp and DT
+PROCESSING_DTTM = '{{ ti.xcom_pull(task_ids="setup_processing_dttm", key="processing_dttm") }}'
+PROCESSING_DTTM_DICT = {"processing_dttm": '{{ ti.xcom_pull(task_ids="setup_processing_dttm", key="processing_dttm") }}'}
+DT = '{{ ti.xcom_pull(task_ids="setup_business_dt", key="return_value") }}'
+DT_END = '{{ (execution_date + macros.timedelta(days=1)).strftime("%Y%m%d") }}'
+BUSINESS_DT_DICT = {"dt": '{{ ti.xcom_pull(task_ids="setup_business_dt", key="return_value") }}'}
+DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
+DT_END_MACRO = '{{ (execution_date + macros.timedelta(days=1)).strftime("%Y-%m-%d") }}'
+
 CURRENCY_CODES = ['CZK', 'EUR', 'GBP', 'HUF', 'RUB', 'USD']
-# FILES = [HOLIDAYS_PL, NBP_EXCHANGE_RATES, SUNDAYS]
 
 ###############################################################
 # Python Functions
 ###############################################################
-def get_check_if_files_exist(file):
+def setup_processing_dttm(**context):
+    """ Method setups processing_dttm in xcom so the same value will be used across tasks
+
+    :param context: Airflow context
     """
-    :param files:
+    context['ti'].xcom_push(key='processing_dttm', value=str(int(time.time())))
+
+
+def setup_business_dt(**kwargs):
+    """ Method setups business date in xcom so the same value will be used across tasks
+
+    :param context: Airflow context
+    """
+    dt = (kwargs.get("execution_date", None)).strftime('%Y%m%d')
+    return dt
+
+def check_if_sunday(file, years, dt):
+    """
+    :param ingest_path:
+    :param years:
+    :param dt:
     :return:
     """
-    if os.path.exists(file):
-        print(True)
+    before = datetime(min(years), 1, 1)
+    after = datetime(max(years), 12, 31)
+    rr = rrule.rrule(rrule.WEEKLY, byweekday=SU, dtstart=before)
 
-    return False
+    output = pd.DataFrame(rr.between(before, after, inc=True), columns=['date'])
+    output['holiday'] = 'Sunday'
+
+    output.to_csv(f'{file}', index=False)
+
+    print("\nDT:", dt)
+    # TEST SUNDAYS:"
+    # dt = "2019-06-09"
+    # dt = "2022-08-28"
+
+    # df = pd.read_csv(file)
+    print(output)
+
+    if dt in sorted(set(output['date'])):
+        raise AirflowException("WORKDAY: SUNDAY. STOPPING THE PROCESS NOW.")
+    else:
+        print("WORKDAY: NOT SUNDAY. MOVING THE PROCESS ON.")
+
+
+def check_if_files_exist(file):
+    """
+    :param files:
+    :return: False if file exists
+    """
+    if os.path.exists(file):
+        # return False
+        return True
+    else:
+        raise AirflowException("ALL FILES ARE ALREADY READY")
+
 
 # Get dated for Polish holidays
 def get_holidays_pl(ingest_path, years):
@@ -167,7 +224,7 @@ default_args = {
 dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
-    schedule_interval="0 2 * * 1-6",
+    schedule_interval="0 0 * * 1-6",
     default_args=default_args,
 
 )
@@ -186,6 +243,36 @@ get_start_datetime = BashOperator(
     """,
     dag=dag
 )
+
+
+get_setup_processing_dttm = PythonOperator(
+    task_id="t_get_setup_processing_dttm",
+    provide_context=True,
+    python_callable=setup_processing_dttm,
+    dag=dag
+)
+
+
+get_setup_business_dt = PythonOperator(
+    task_id="t_get_setup_business_dt",
+    provide_context=True,
+    python_callable=setup_business_dt,
+    dag=dag
+)
+
+# file, years, dt
+check_if_sunday = PythonOperator(
+    task_id="t_check_if_sunday",
+    provide_context=False,
+    python_callable=check_if_sunday,
+    op_kwargs={
+        "file": SUNDAYS,
+        "years": YEARS,
+        "dt": DT_MACRO
+    },
+    dag=dag
+)
+
 
 # # GET WEEKDAY
 # get_weekday = BranchDayOfWeekOperator(
@@ -266,23 +353,25 @@ get_python_libraries = BashOperator(
 )
 
 
-# CHECK IF SUNDAYS EXIST
-get_check_if_sundays_exist = ShortCircuitOperator(
-    task_id="t_get_check_if_sundays_exist",
-    provide_context=False,
-    python_callable=get_check_if_files_exist,
-    op_kwargs={
-        "file": HOLIDAYS_PL
-    },
-    dag=dag
-)
+# # CHECK IF SUNDAYS EXIST
+# # check_if_sundays_exist = ShortCircuitOperator(
+# check_if_sundays_exist = PythonOperator(
+#     task_id="t_check_if_sundays_exist",
+#     provide_context=False,
+#     python_callable=check_if_files_exist,
+#     op_kwargs={
+#         "file": HOLIDAYS_PL
+#     },
+#     dag=dag
+# )
 
 
 # CHECK IF HOLIDAYS_PL EXIST
-get_check_if_holidays_pl_exist = ShortCircuitOperator(
-    task_id="t_get_check_if_holidays_pl_exist",
+# check_if_holidays_pl_exist = ShortCircuitOperator(
+check_if_holidays_pl_exist = PythonOperator(
+    task_id="t_check_if_holidays_pl_exist",
     provide_context=False,
-    python_callable=get_check_if_files_exist,
+    python_callable=check_if_files_exist,
     op_kwargs={
         "file": HOLIDAYS_PL
     },
@@ -291,10 +380,11 @@ get_check_if_holidays_pl_exist = ShortCircuitOperator(
 
 
 # CHECK IF NBP_RATES EXIST
-get_check_if_nbp_exchange_rates_exist = ShortCircuitOperator(
-    task_id="t_get_check_if_nbp_exchange_rates_exist",
+# check_if_nbp_exchange_rates_exist = ShortCircuitOperator(
+check_if_nbp_exchange_rates_exist = PythonOperator(
+    task_id="t_check_if_nbp_exchange_rates_exist",
     provide_context=False,
-    python_callable=get_check_if_files_exist,
+    python_callable=check_if_files_exist,
     op_kwargs={
         "file": NBP_EXCHANGE_RATES
     },
@@ -302,9 +392,35 @@ get_check_if_nbp_exchange_rates_exist = ShortCircuitOperator(
 )
 
 
+
 # DUMMY TASK DOING NOTHING
-get_task_connector_doing_nothing = DummyOperator(
-    task_id="task_connector_doing_nothing",
+check_all_failed_sunday = DummyOperator(
+    task_id="t_check_all_failed_sunday",
+    trigger_rule='all_failed',
+    dag=dag
+)
+
+
+# DUMMY TASK DOING NOTHING
+check_all_success_sunday = DummyOperator(
+    task_id="t_check_all_success_sunday",
+    trigger_rule='all_success',
+    dag=dag
+)
+
+
+
+# DUMMY TASK DOING NOTHING
+check_one_failed = DummyOperator(
+    task_id="t_check_one_failed",
+    trigger_rule='one_failed',
+    dag=dag
+)
+
+# DUMMY TASK DOING NOTHING
+check_all_success = DummyOperator(
+    task_id="t_check_all_success",
+    trigger_rule='all_success',
     dag=dag
 )
 
@@ -321,16 +437,16 @@ get_holidays_pl = PythonOperator(
 )
 
 
-# GET SUNDAYS
-get_sundays = PythonOperator(
-    task_id="t_get_sundays",
-    python_callable=get_sundays,
-    op_kwargs={
-        'ingest_path': INGEST_PATH,
-        'years': YEARS
-    },
-    dag=dag
-)
+# # GET SUNDAYS
+# get_sundays = PythonOperator(
+#     task_id="t_get_sundays",
+#     python_callable=get_sundays,
+#     op_kwargs={
+#         'ingest_path': INGEST_PATH,
+#         'years': YEARS
+#     },
+#     dag=dag
+# )
 
 
 # GET NBP RATES
@@ -362,11 +478,25 @@ get_end_datetime = BashOperator(
 ###############################################################
 # Defining Tasks relations
 ###############################################################
-get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
+get_start_datetime >> [get_setup_processing_dttm, get_setup_business_dt] >> check_if_sunday
+[get_setup_processing_dttm, get_setup_business_dt] >> check_if_sunday
+
+check_if_sunday >> check_all_failed_sunday
+check_all_failed_sunday >> get_end_datetime
+
+check_if_sunday >> check_all_success_sunday
+check_all_success_sunday >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_python_libraries
-get_python_libraries >> [get_check_if_sundays_exist, get_check_if_holidays_pl_exist,
-                         get_check_if_nbp_exchange_rates_exist]
-[get_check_if_sundays_exist, get_check_if_holidays_pl_exist,
- get_check_if_nbp_exchange_rates_exist] >> get_task_connector_doing_nothing
-get_task_connector_doing_nothing >> [get_holidays_pl, get_sundays, get_nbp_rates]
-[get_holidays_pl, get_sundays, get_nbp_rates] >> get_end_datetime
+# get_python_libraries >> [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist]
+get_python_libraries >> [check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist]
+
+# [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
+[check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_one_failed
+# check_one_failed >> [get_holidays_pl, get_sundays, get_nbp_rates]
+check_one_failed >> [get_holidays_pl, get_nbp_rates]
+# [get_holidays_pl, get_sundays, get_nbp_rates] >> get_end_datetime
+[get_holidays_pl, get_nbp_rates] >> get_end_datetime
+
+# [check_if_sundays_exist, check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_all_success
+[check_if_holidays_pl_exist, check_if_nbp_exchange_rates_exist] >> check_all_success
+check_all_success >> get_end_datetime
