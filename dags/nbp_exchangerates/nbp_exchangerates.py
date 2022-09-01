@@ -28,6 +28,7 @@ EXCURSIONS = f"{TRANSFER_PATH}/excursions_data.csv"
 INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
 HOLIDAYS_PL = f"{INGEST_PATH}/holidays_pl.csv"
 NBP_EXCHANGE_RATES = f"{INGEST_PATH}/nbp_exchangerates.csv"
+NBP_EXCHANGE_RATES_LATEST = f"{INGEST_PATH}/nbp_exchangerates_latest.csv"
 SUNDAYS = f"{INGEST_PATH}/sundays.csv"
 CURATED_PATH = f"{ROOT_PATH_DAG}/curated"
 NON_WORKING_DAYS = f"{CURATED_PATH}/non_working_days.csv"
@@ -69,6 +70,7 @@ def setup_business_dt(**kwargs):
     """
     dt = (kwargs.get("execution_date", None)).strftime('%Y%m%d')
     return dt
+
 
 def check_if_non_working_day(file, dt):
     """
@@ -178,8 +180,12 @@ def get_non_working_days(sundays, holidays_pl, curated_path):
     :return:
     """
     df_1 = pd.read_csv(sundays)
+    print(df_1.shape)
     df_2 = pd.read_csv(holidays_pl)
+    print(df_2.shape)
     output = pd.concat([df_1, df_2], ignore_index=True)
+    output.drop_duplicates(inplace=True)
+    print(output.shape)
     print(output)
 
     output.to_csv(f'{curated_path}/non_working_days.csv', index=False)
@@ -202,7 +208,6 @@ def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
             try:
                 print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{year}-12-31/")
                 respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{year}-12-31/").json()['rates']
-                # json_norm = pd.json_normalize(respond)
                 json_norm = json_normalize(respond)
                 json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
                 json_norm['exchange_rate'] = currency_code
@@ -212,7 +217,6 @@ def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
             except Exception:
                 print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{yesterday}/")
                 respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{year}-01-01/{yesterday}/").json()['rates']
-                # json_norm = pd.json_normalize(respond)
                 json_norm = json_normalize(respond)
                 json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
                 json_norm['exchange_rate'] = currency_code
@@ -223,6 +227,99 @@ def get_nbp_rates(ingest_path, years, yesterday, currency_codes):
     output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
 
 
+def get_latest_exchange_rates(ingest_path, currency_codes, dt_minus_one):
+    """
+    :param ingest_path:
+    :param currency_codes:
+    :param dt_minus_one:
+    :return:
+    """
+    time.sleep(60)
+    output = pd.DataFrame()
+    for currency_code in currency_codes:
+        if currency_code != 'RUB':
+            print(currency_code)
+            try:
+                print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                json_norm = json_normalize(respond)
+                json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                json_norm['exchange_rate'] = currency_code
+                print(json_norm)
+                output = pd.concat([output, json_norm], ignore_index=True)
+            except Exception:
+                print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                json_norm = json_normalize(respond)
+                json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                json_norm['exchange_rate'] = currency_code
+                print(json_norm)
+                output = pd.concat([output, json_norm], ignore_index=True)
+
+    output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
+
+
+def append_latest_exchange_rate(ingest_path, nbp_exchange_rates, nbp_exchange_rates_latest):
+    """
+    :param ingest_path:
+    :param nbp_exchange_rates:
+    :param nbp_exchange_rates_latest:
+    :return:
+    """
+    df_1 = pd.read_csv(nbp_exchange_rates)
+    print(df_1.shape)
+    df_2 = pd.read_csv(nbp_exchange_rates_latest)
+    print(df_2.shape)
+    output = pd.concat([df_1, df_2], ignore_index=True)
+    output.drop_duplicates(inplace=True)
+    print(output.shape)
+    print(output)
+
+    output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
+
+
+def merge_exchange_rates(curated_path, excursions, nbp_exchange_rates):
+    """
+    :param ingest_path:
+    :param excursions:
+    :param nbp_exchange_rates:
+    :return:
+    """
+
+    df_1 = pd.read_csv(excursions)
+    print(df_1.shape)
+    df_2 = pd.read_csv(nbp_exchange_rates)
+    print(df_2.shape)
+
+    output = df_1.merge(
+        df_2,
+        how='left',
+        left_on=['SP_TourDate', 'SP_PaidCurrency'],
+        right_on=['effectiveDate', 'exchange_rate']
+    )
+
+    output.to_csv(f'{curated_path}/nbp_exchangerates.csv', index=False)
+
+
+def calculate_values(curated_path, business_ready_path):
+    """
+    :param curated_path:
+    :param business_ready_path:
+    :return:
+    """
+    df_1 = pd.read_csv(f"{curated_path}/nbp_exchangerates.csv")
+    print(df_1.shape)
+    df_1.drop(columns=['no', 'effectiveDate', 'exchange_rate'], inplace=True)
+    df_1['SP_Paid'] = df_1['SP_Paid'].str.replace(',','.')
+    df_1['SP_ValueCalculated'] = (df_1['SP_Paid']).apply(float) * df_1['mid'].apply(float)
+    df_1.rename(columns={"mid": "SP_ExchangeRate"}, inplace=True)
+
+    new_cols = [col for col in df_1.columns if col != 'SP_ExchangeRate'] + ['SP_ExchangeRate']
+    output = df_1[new_cols]
+
+    output.to_csv(f'{business_ready_path}/nbp_exchangerates.csv', index=False)
+
+
 ###############################################################
 # DAG Definition
 ###############################################################
@@ -230,6 +327,7 @@ default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
     "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
+    "start_date": datetime(2022, 8, 27),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -242,7 +340,7 @@ default_args = {
 dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
-    schedule_interval="0 1 * * 1-6",
+    schedule_interval="0 17 * * 1-5",
     default_args=default_args,
 
 )
@@ -506,8 +604,52 @@ get_non_working_days = PythonOperator(
 #     dag=dag
 # )
 
-get_latest_exchange_rates = DummyOperator(
+get_latest_exchange_rates = PythonOperator(
     task_id="t_get_latest_exchange_rates",
+    python_callable=get_latest_exchange_rates,
+    op_kwargs={
+        'ingest_path': INGEST_PATH,
+        'currency_codes': CURRENCY_CODES,
+        'dt_minus_one': DT_MINUS_ONE
+    },
+    trigger_rule='one_success',
+    dag=dag
+)
+
+
+append_latest_exchange_rate = PythonOperator(
+    task_id="t_append_latest_exchange_rate",
+    python_callable=append_latest_exchange_rate,
+    op_kwargs={
+        'ingest_path': INGEST_PATH,
+        'nbp_exchange_rates': NBP_EXCHANGE_RATES,
+        'nbp_exchange_rates_latest': NBP_EXCHANGE_RATES_LATEST
+    },
+    trigger_rule='one_success',
+    dag=dag
+)
+
+
+merge_exchange_rates = PythonOperator(
+    task_id="t_merge_exchange_rates",
+    python_callable=merge_exchange_rates,
+    op_kwargs={
+        'curated_path': CURATED_PATH,
+        'excursions': EXCURSIONS,
+        'nbp_exchange_rates': NBP_EXCHANGE_RATES
+    },
+    trigger_rule='one_success',
+    dag=dag
+)
+
+
+calculate_values = PythonOperator(
+    task_id="t_calculate_values",
+    python_callable=calculate_values,
+    op_kwargs={
+        'curated_path': CURATED_PATH,
+        'business_ready_path': BUSINESS_READY_PATH
+    },
     trigger_rule='one_success',
     dag=dag
 )
@@ -564,4 +706,7 @@ check_one_failed >> get_end_datetime
 # check_all_success >>
 check_all_success >> get_latest_exchange_rates
 #
-get_latest_exchange_rates >> get_end_datetime
+get_latest_exchange_rates >> append_latest_exchange_rate
+append_latest_exchange_rate >> merge_exchange_rates
+merge_exchange_rates >> calculate_values
+calculate_values>> get_end_datetime
