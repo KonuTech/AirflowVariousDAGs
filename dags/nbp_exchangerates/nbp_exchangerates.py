@@ -188,9 +188,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
 
         # Check if DT in a calendar of working days in Poland
         if dt_minus_one not in sorted(set(df['date'])):
-        #     print("jest: ", dt_minus_one)
-        #     print(df[df['date'] == dt_minus_one])
-        # else:
+
+            # Get previous working day in Poland
             print("Holiday: ", dt_minus_one)
             print("Get previous working day in Poland: ")
             print(df[df['date'] < dt_minus_one])
@@ -198,8 +197,6 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
 
             print('Max index value:')
             print(previous_days.loc[previous_days['date'].idxmax()][0])
-
-            # Get previous working day in Poland
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
             print("previous_working_day: ", previous_working_day)
 
