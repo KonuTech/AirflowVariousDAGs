@@ -2,6 +2,7 @@
 # nbp_exchangerates.py relates libraries
 ###############################################
 holidays
+pandavro
 
 ###############################################
 # other libraries
