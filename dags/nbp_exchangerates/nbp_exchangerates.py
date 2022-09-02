@@ -164,33 +164,76 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
     """
 
     print("\nCurrent dt: ", dt)
+    print("\ndt_minus_one: ", dt_minus_one)
+
+    # Get calendar of working days in Poland
+    df = pd.read_csv(file, infer_datetime_format=True)
+    df['date'] = df['date'].astype('datetime64[ns]')
+    print(df.info())
+    print(df)
 
     # Convert DT to datetime
     day_number = pd.to_datetime(dt).weekday()
 
     # Check week day number
-    if day_number >= 5: # 5 Saturday, 6 Sununday
-        print("Weekend - Do nothing. Week day number: ", day_number)
-        exit()
+    # if day_number >= 5: # 5 Saturday, 6 Sununday
+    #     print("Weekend - Do nothing. Week day number: ", day_number)
+    #     exit()
 
-    elif day_number == 0: # 0 Monday
+    if day_number in (0, 5, 6): # 0 Monday, Saturday, Sunday
         print(
-            """Monday - Get Exchange rates from previous working day.
-            Excluding weekends and holidays. Week day number: """,
+            """Monday, Saturday or Sunday - Get Exchange rates from previous working day.
+            Week Day number: """,
             day_number
         )
 
-        # Get calendar of working days in Poland
-        df = pd.read_csv(file, infer_datetime_format=True)
-        df['date'] = df['date'].astype('datetime64[ns]')
-        print(df.info())
-        print(df)
+        # Check if (DT - 1) in a calendar of working days in Poland
+        if str(dt_minus_one) in sorted(set(df['date'].astype('str'))):
 
-        # Check if DT in a calendar of working days in Poland
-        if dt_minus_one not in sorted(set(df['date'])):
-
+            # (DT -1) is a Working day
             # Get previous working day in Poland
-            print("Holiday: ", dt_minus_one)
+            print("Previous day is a working day: ", dt_minus_one)
+
+            time.sleep(5)
+            output = pd.DataFrame()
+
+            # Get NBP exchange rates data
+            for currency_code in currency_codes:
+                if currency_code != 'RUB':
+                    print(currency_code)
+                    try:
+                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                        json_norm = json_normalize(respond)
+                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                        json_norm['exchange_rate'] = currency_code
+                        print(json_norm)
+                        output = pd.concat([output, json_norm], ignore_index=True)
+                    except Exception:
+                        pass
+
+            # Drop duplicates if exist
+            output.drop_duplicates(inplace=True)
+
+            # Replace of date
+            print("Print current date used to replace date of last working day")
+            print(dt)
+            print("Print APi output before replace:")
+            print(output)
+            # Replace API date - here a date of last working day - with DAGs Execution date
+            # to allow for correct left join in merge by date and exchange rate type
+            print("Print APi output after replace:")
+            # output['effectiveDate'] = output['effectiveDate'].replace(str(previous_working_day), str(dt))
+            output.loc[output['effectiveDate'] == str(dt_minus_one), 'effectiveDate'] = str(dt)
+            print(output)
+
+            # Save output as CSV
+            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+
+        else:
+            # (DT -1) is not a Working day
+            # Get previous working day in Poland
+            print("Previous day not a working day: ", dt_minus_one)
             print("Get previous working day in Poland: ")
             print(df[df['date'] < dt_minus_one])
             previous_days = df[df['date'] < dt_minus_one]
@@ -200,7 +243,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
             print("previous_working_day: ", previous_working_day)
 
-            time.sleep(30)
+            time.sleep(5)
             output = pd.DataFrame()
 
             # Get NBP exchange rates data
@@ -221,35 +264,115 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
 
+            # Replace of date
+            print("Print current date used to replace date of last working day")
+            print(dt)
+            print("Print APi output before replace:")
+            print(output)
+            # Replace API date - here a date of last working day - with DAGs Execution date
+            # to allow for correct left join in merge by date and exchange rate type
+            print("Print APi output after replace:")
+            # output['effectiveDate'] = output['effectiveDate'].replace(str(previous_working_day), str(dt))
+            output.loc[output['effectiveDate'] == str(previous_working_day), 'effectiveDate'] = str(dt)
+            print(output)
+
             # Save output as CSV
             output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
     else:
         print("Weekday- Get Exchange rates from previous working day. Week day number: ", day_number)
 
-        time.sleep(30)
-        output = pd.DataFrame()
+        # Check if (DT - 1) in a calendar of Working Days in Poland
+        if str(dt_minus_one) in sorted(set(df['date'].astype('str'))):
 
-        # Get NBP exchange rates data
-        for currency_code in currency_codes:
-            if currency_code != 'RUB':
-                print(currency_code)
-                try:
-                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
-                    json_norm = json_normalize(respond)
-                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                    json_norm['exchange_rate'] = currency_code
-                    print(json_norm)
-                    output = pd.concat([output, json_norm], ignore_index=True)
-                except Exception:
-                    pass
+            # (DT -1) is a Working day
+            # Get previous working day in Poland
+            print("Previous day is a working day: ", dt_minus_one)
 
-        # Drop duplicates if exist
-        output.drop_duplicates(inplace=True)
+            time.sleep(5)
+            output = pd.DataFrame()
 
-        # Save output as CSV
-        output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+            # Get NBP exchange rates data
+            for currency_code in currency_codes:
+                if currency_code != 'RUB':
+                    print(currency_code)
+                    try:
+                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                        json_norm = json_normalize(respond)
+                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                        json_norm['exchange_rate'] = currency_code
+                        print(json_norm)
+                        output = pd.concat([output, json_norm], ignore_index=True)
+                    except Exception:
+                        pass
+
+            # Drop duplicates if exist
+            output.drop_duplicates(inplace=True)
+
+            # Replace of date
+            print("Print current date used to replace date of last working day")
+            print(dt)
+            print("Print APi output before replace:")
+            print(output)
+            # Replace API date - here a date of last working day - with DAGs Execution date
+            # to allow for correct left join in merge by date and exchange rate type
+            print("Print APi output after replace:")
+            # output['effectiveDate'] = output['effectiveDate'].replace(str(previous_working_day), str(dt))
+            output.loc[output['effectiveDate'] == str(dt_minus_one), 'effectiveDate'] = str(dt)
+            print(output)
+
+            # Save output as CSV
+            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+
+        else:
+            # (DT -1) is not a Working Day in Poland
+            # Get previous working day in Poland
+            print("Previous day not a working day: ", dt_minus_one)
+            print("Get previous working day in Poland: ")
+            print(df[df['date'] < dt_minus_one])
+            previous_days = df[df['date'] < dt_minus_one]
+
+            print('Max index value:')
+            print(previous_days.loc[previous_days['date'].idxmax()][0])
+            previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
+            print("previous_working_day: ", previous_working_day)
+
+            time.sleep(5)
+            output = pd.DataFrame()
+
+            # Get NBP exchange rates data
+            for currency_code in currency_codes:
+                if currency_code != 'RUB':
+                    print(currency_code)
+                    try:
+                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
+                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                        json_norm = json_normalize(respond)
+                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                        json_norm['exchange_rate'] = currency_code
+                        print(json_norm)
+                        output = pd.concat([output, json_norm], ignore_index=True)
+                    except Exception:
+                        pass
+
+            # Drop duplicates if exist
+            output.drop_duplicates(inplace=True)
+
+            # Replace of date
+            print("Print current date used to replace date of last working day")
+            print(dt)
+            print("Print APi output before replace:")
+            print(output)
+            # Replace API date - here a date of last working day - with DAGs Execution date
+            # to allow for correct left join in merge by date and exchange rate type
+            print("Print APi output after replace:")
+            # output['effectiveDate'] = output['effectiveDate'].replace(str(previous_working_day), str(dt))
+            output.loc[output['effectiveDate'] == str(previous_working_day), 'effectiveDate'] = str(dt)
+            print(output)
+
+            # Save output as CSV
+            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
 
 # APPEND NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND
@@ -347,8 +470,8 @@ def calculate_values(curated_path, business_ready_path):
 default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
-    # "start_date": datetime(2022, 8, 26),
-    "start_date": datetime(2019, 6, 5),
+    # "start_date": datetime(2022, 8, 1),
+    "start_date": datetime(2019, 6, 1),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -360,7 +483,8 @@ default_args = {
 dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
-    schedule_interval="0 1 * * 1-5",
+    # schedule_interval="0 1 * * 1-5",
+    schedule_interval="0 1 * * *",
     default_args=default_args,
     catchup=True,
     max_active_runs=1
@@ -477,33 +601,33 @@ get_working_days = PythonOperator(
 )
 
 
-# CHECK IF GIVEN DATE IS A WORKING DAY IN POLAND
-check_if_working_day = PythonOperator(
-    task_id="t_check_if_working_day",
-    provide_context=False,
-    python_callable=check_if_working_day,
-    op_kwargs={
-        "file": f"{INGEST_PATH}/working_days.csv",
-        "dt": DT_MACRO
-    },
-    dag=dag
-)
+# # CHECK IF GIVEN DATE IS A WORKING DAY IN POLAND
+# check_if_working_day = PythonOperator(
+#     task_id="t_check_if_working_day",
+#     provide_context=False,
+#     python_callable=check_if_working_day,
+#     op_kwargs={
+#         "file": f"{INGEST_PATH}/working_days.csv",
+#         "dt": DT_MACRO
+#     },
+#     dag=dag
+# )
 
 
-# CHECK IF ALL TASKS ARE FAILED
-check_if_working_day_failed = DummyOperator(
-    task_id="holiday",
-    trigger_rule='all_failed',
-    dag=dag
-)
-
-
-# CHECK IF ALL TASKS ALE SUCCEDED
-check_if_working_day_success = DummyOperator(
-    task_id="working_day",
-    trigger_rule='all_success',
-    dag=dag
-)
+# # CHECK IF ALL TASKS ARE FAILED
+# check_if_working_day_failed = DummyOperator(
+#     task_id="holiday",
+#     trigger_rule='all_failed',
+#     dag=dag
+# )
+#
+#
+# # CHECK IF ALL TASKS ALE SUCCEDED
+# check_if_working_day_success = DummyOperator(
+#     task_id="working_day",
+#     trigger_rule='all_success',
+#     dag=dag
+# )
 
 
 # CHECK IF EXCURSIONS FILE EXISTS
@@ -576,7 +700,8 @@ append_latest_exchange_rate = PythonOperator(
 )
 
 
-# INSERT NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND TO EXCURSIONS TABLE
+# MERGE NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND AS DT (CURRENT EXECUTION DATE) TO DATE OF EXCURSIONS TABLE
+# IN OTHER WORDS: A MERGE IS DONE BY EXCHANGE RATE AND PREVIOUS WORKING DATE REPLACED WITH CURRENT DATE
 merge_exchange_rates = PythonOperator(
     task_id="t_merge_exchange_rates",
     python_callable=merge_exchange_rates,
@@ -625,12 +750,13 @@ get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_pa
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
 get_setup_business_dt >> get_working_days
 
-get_working_days >> check_if_working_day
-check_if_working_day >> check_if_working_day_failed
-check_if_working_day_failed >> get_end_datetime
-check_if_working_day >> check_if_working_day_success
+# get_working_days >> check_if_working_day
+# check_if_working_day >> check_if_working_day_failed
+# check_if_working_day_failed >> get_end_datetime
+# check_if_working_day >> check_if_working_day_success
 
-check_if_working_day_success >> [check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists]
+
+get_working_days >> [check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists]
 [check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists] >> check_one_failed
 [check_if_excursions_exists, check_if_nbp_exchange_rates_ingest_schema_exists] >> check_all_success
 
