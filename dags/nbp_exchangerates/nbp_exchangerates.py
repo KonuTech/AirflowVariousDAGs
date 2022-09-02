@@ -77,14 +77,14 @@ def check_if_working_day(file, dt):
 # CHECK IF GIVEN FILE EXISTS
 def check_if_file_exists(file):
     """
-    :param files:
+    :param file:
     :return:
     """
     # Check if given files exists
     if os.path.exists(file):
         return True
     else:
-        raise AirflowException("MISSING INPUT DATA SOURCE OR OUTPUT SCHEMA")
+        raise AirflowException("MISSING INPUT DATA OR OUTPUT SCHEMA")
 
 
 # GET A CALENDAR OF WORKING DAY IN POLAND
@@ -200,7 +200,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
             print("previous_working_day: ", previous_working_day)
 
-            time.sleep(60)
+            time.sleep(30)
             output = pd.DataFrame()
 
             # Get NBP exchange rates data
@@ -222,13 +222,12 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             output.drop_duplicates(inplace=True)
 
             # Save output as CSV
-            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
-
+            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
     else:
         print("Weekday- Get Exchange rates from previous working day. Week day number: ", day_number)
 
-        time.sleep(60)
+        time.sleep(30)
         output = pd.DataFrame()
 
         # Get NBP exchange rates data
@@ -250,7 +249,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
         output.drop_duplicates(inplace=True)
 
         # Save output as CSV
-        output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False)
+        output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
 
 # APPEND NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND
@@ -262,21 +261,22 @@ def append_latest_exchange_rate(ingest_path, nbp_exchange_rates, nbp_exchange_ra
     :return:
     """
     # Get already collected NBP exchange rates
-    df_1 = pd.read_csv(nbp_exchange_rates)
-    print(df_1.shape)
+    # df_1 = pd.read_csv(nbp_exchange_rates)
+    # print(df_1.shape)
 
     # Insert most recent exchange rates for previous working day
-    df_2 = pd.read_csv(nbp_exchange_rates_latest)
-    print(df_2.shape)
+    # df_2 = pd.read_csv(nbp_exchange_rates_latest)
+    df = pd.read_csv(nbp_exchange_rates_latest)
+    print(df.shape)
 
     # Get output
-    output = pd.concat([df_1, df_2], ignore_index=True)
+    # output = pd.concat([df_1, df_2], ignore_index=True)
 
     # Drop duplicates if exist
-    output.drop_duplicates(inplace=True)
+    df.drop_duplicates(inplace=True)
 
     # Save output as CSV
-    output.to_csv(f'{ingest_path}/nbp_exchangerates.csv', index=False)
+    df.to_csv(f'{ingest_path}/nbp_exchangerates.csv', mode='a', index=False)
 
 
 # INSERT NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND TO EXCURSIONS TABLE
@@ -347,9 +347,8 @@ def calculate_values(curated_path, business_ready_path):
 default_args = {
     "owner": "Konrad Borowiec",
     "depends_on_past": False,
-    # "start_date": datetime(TODAY.year, TODAY.month, TODAY.day),
-    "start_date": datetime(2022, 8, 26),
-    # "start_date": datetime(2019, 6, 5),
+    # "start_date": datetime(2022, 8, 26),
+    "start_date": datetime(2019, 6, 5),
     "email": ["dummy_name@mail.com"],
     "email_on_failure": False,
     "email_on_retry": False,
@@ -362,7 +361,9 @@ dag = DAG(
     dag_id="nbp_exchangerates",
     description="Assessment Task",
     schedule_interval="0 1 * * 1-5",
-    default_args=default_args
+    default_args=default_args,
+    catchup=True,
+    max_active_runs=1
 )
 
 
@@ -381,16 +382,16 @@ get_start_datetime = BashOperator(
 )
 
 
-# INSTALL MISSING PYTHON LIBRARIES
-get_python_libraries = BashOperator(
-    task_id="t_get_python_libraries",
-    bash_command=
-    f"""
-    echo 'INSTALLING PYTHON LIBRARIES RELATED TO THE DAG nbp_exchangerates.py: ';
-    pip install -r {ROOT_PATH_DAG}/requirements.txt
-    """,
-    dag=dag
-)
+# # INSTALL MISSING PYTHON LIBRARIES
+# get_python_libraries = BashOperator(
+#     task_id="t_get_python_libraries",
+#     bash_command=
+#     f"""
+#     echo 'INSTALLING PYTHON LIBRARIES RELATED TO THE DAG nbp_exchangerates.py: ';
+#     pip install -r {ROOT_PATH_DAG}/requirements.txt
+#     """,
+#     dag=dag
+# )
 
 
 # CREATE TRANSFER PATH IN NOT EXISTS
@@ -618,8 +619,9 @@ get_end_datetime = BashOperator(
 ###############################################################
 # Defining Relations Beteween Tasks
 ###############################################################
-get_start_datetime >> get_python_libraries
-get_python_libraries>> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
+# get_start_datetime >> get_python_libraries
+# get_python_libraries>> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
+get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
 get_setup_business_dt >> get_working_days
 
