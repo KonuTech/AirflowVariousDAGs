@@ -194,23 +194,23 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             # Get previous working day in Poland
             print("Previous day is a working day: ", dt_minus_one)
 
-            time.sleep(5)
+            time.sleep(3)
             output = pd.DataFrame()
 
             # Get NBP exchange rates data
             for currency_code in currency_codes:
-                if currency_code != 'RUB':
-                    print(currency_code)
-                    try:
-                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
-                        json_norm = json_normalize(respond)
-                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                        json_norm['exchange_rate'] = currency_code
-                        print(json_norm)
-                        output = pd.concat([output, json_norm], ignore_index=True)
-                    except Exception:
-                        pass
+                # if currency_code != 'RUB':
+                print(currency_code)
+                try:
+                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                    json_norm = json_normalize(respond)
+                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                    json_norm['exchange_rate'] = currency_code
+                    print(json_norm)
+                    output = pd.concat([output, json_norm], ignore_index=True)
+                except Exception:
+                    pass
 
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
@@ -243,23 +243,23 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
             print("previous_working_day: ", previous_working_day)
 
-            time.sleep(5)
+            time.sleep(3)
             output = pd.DataFrame()
 
             # Get NBP exchange rates data
             for currency_code in currency_codes:
-                if currency_code != 'RUB':
-                    print(currency_code)
-                    try:
-                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
-                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
-                        json_norm = json_normalize(respond)
-                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                        json_norm['exchange_rate'] = currency_code
-                        print(json_norm)
-                        output = pd.concat([output, json_norm], ignore_index=True)
-                    except Exception:
-                        pass
+                # if currency_code != 'RUB':
+                print(currency_code)
+                try:
+                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
+                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                    json_norm = json_normalize(respond)
+                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                    json_norm['exchange_rate'] = currency_code
+                    print(json_norm)
+                    output = pd.concat([output, json_norm], ignore_index=True)
+                except Exception:
+                    pass
 
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
@@ -289,23 +289,23 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             # Get previous working day in Poland
             print("Previous day is a working day: ", dt_minus_one)
 
-            time.sleep(5)
+            time.sleep(3)
             output = pd.DataFrame()
 
             # Get NBP exchange rates data
             for currency_code in currency_codes:
-                if currency_code != 'RUB':
-                    print(currency_code)
-                    try:
-                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
-                        json_norm = json_normalize(respond)
-                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                        json_norm['exchange_rate'] = currency_code
-                        print(json_norm)
-                        output = pd.concat([output, json_norm], ignore_index=True)
-                    except Exception:
-                        pass
+                # if currency_code != 'RUB':
+                print(currency_code)
+                try:
+                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}")
+                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                    json_norm = json_normalize(respond)
+                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                    json_norm['exchange_rate'] = currency_code
+                    print(json_norm)
+                    output = pd.concat([output, json_norm], ignore_index=True)
+                except Exception:
+                    pass
 
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
@@ -338,23 +338,23 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, dt, dt_minus_on
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
             print("previous_working_day: ", previous_working_day)
 
-            time.sleep(5)
+            time.sleep(3)
             output = pd.DataFrame()
 
             # Get NBP exchange rates data
             for currency_code in currency_codes:
-                if currency_code != 'RUB':
-                    print(currency_code)
-                    try:
-                        print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
-                        respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
-                        json_norm = json_normalize(respond)
-                        json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                        json_norm['exchange_rate'] = currency_code
-                        print(json_norm)
-                        output = pd.concat([output, json_norm], ignore_index=True)
-                    except Exception:
-                        pass
+                # if currency_code != 'RUB':
+                print(currency_code)
+                try:
+                    print(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}")
+                    respond = requests.get(f"http://api.nbp.pl/api/exchangerates/rates/a/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                    json_norm = json_normalize(respond)
+                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
+                    json_norm['exchange_rate'] = currency_code
+                    print(json_norm)
+                    output = pd.concat([output, json_norm], ignore_index=True)
+                except Exception:
+                    pass
 
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
@@ -460,8 +460,8 @@ def calculate_values(curated_path, business_ready_path):
     # Save output as CSV
     output.to_csv(f'{business_ready_path}/nbp_exchangerates.csv', index=False)
 
-    # Save output as Avro
-    pdx.to_avro(f'{business_ready_path}/nbp_exchangerates.avro', output)
+    # # Save output as Avro
+    # pdx.to_avro(f'{business_ready_path}/nbp_exchangerates.avro', output)
 
 
 ###############################################################

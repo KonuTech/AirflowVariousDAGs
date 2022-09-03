@@ -1,3 +1,6 @@
+# To clean local cashe related to docker images:
+C:\Users\KonuTech\AppData\Local\Docker\wsl
+
 # Spark
 spark_default
 spark://spark
