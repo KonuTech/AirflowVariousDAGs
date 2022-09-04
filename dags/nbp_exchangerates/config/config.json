@@ -1,0 +1,19 @@
+{
+  "URL_NBP_API": "http://api.nbp.pl/api/exchangerates/rates/a",
+  "OWNER": "Konrad Borowiec",
+  "EMAIL": "dummy_mail@mail.com",
+  "TAGS": [
+    "nbp",
+    "exchange rates",
+    "assessment task"
+  ],
+  "CURRENCY_CODES": ["CZK",
+    "EUR",
+    "GBP",
+    "HUF",
+    "RUB",
+    "USD"
+  ],
+  "DAG_ID": "nbp_exchangerates",
+  "DESCRIPTION": "Assessment Task"
+}
