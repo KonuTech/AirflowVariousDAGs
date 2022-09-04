@@ -435,7 +435,7 @@ def get_avro_output(business_ready_path):
     print(df.shape)
 
     # Save Pandas data frame as Avro
-    pdx.to_avro(f"{business_ready_path}nbp_exchangerates.avro", df)
+    pdx.to_avro(f"{business_ready_path}/nbp_exchangerates.avro", df)
 
 
 #####################################################################################
