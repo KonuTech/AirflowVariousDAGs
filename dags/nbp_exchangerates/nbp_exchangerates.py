@@ -58,9 +58,11 @@ DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
 logging.basicConfig(filename='logs/logs.log', filemode='a', format='%(asctime)s - %(message)s',
                     datefmt='%d-%b-%y %H:%M:%S', level=logging.INFO)
 
-###############################################################
+logging.info('####### DAG STARTED #######')
+
+#####################################################################################
 # Python Functions
-###############################################################
+#####################################################################################
 def setup_business_dt(**kwargs):
     """GET BUSINESS DATE FROM AIRFLOW'S EXECUTION DATE
     :param kwargs: pass any number of keyword arguments from dictionary
@@ -426,9 +428,9 @@ def calculate_values(curated_path, business_ready_path):
     output.to_csv(f"{business_ready_path}/nbp_exchangerates.csv", index=False)
 
 
-###############################################################
+#####################################################################################
 # DAG Definition
-###############################################################
+#####################################################################################
 default_args = {
     "owner": OWNER,
     "depends_on_past": False,
@@ -450,9 +452,9 @@ dag = DAG(
     max_active_runs=1
 )
 
-###############################################################
+#####################################################################################
 # Tasks
-###############################################################
+#####################################################################################
 # GET DATE TIME OF STARTED DAG
 get_start_datetime = BashOperator(
     task_id="t_get_start_datetime",
@@ -644,9 +646,9 @@ get_end_datetime = BashOperator(
     dag=dag
 )
 
-###############################################################
+#####################################################################################
 # Set Relations Between Tasks
-###############################################################
+#####################################################################################
 get_start_datetime >> [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path]
 [get_transfer_path, get_ingest_path, get_business_ready_path, get_curated_path] >> get_setup_business_dt
 get_setup_business_dt >> get_working_days
@@ -662,3 +664,6 @@ get_latest_exchange_rates >> append_latest_exchange_rate
 append_latest_exchange_rate >> merge_exchange_rates
 merge_exchange_rates >> calculate_values
 calculate_values >> get_end_datetime
+
+
+logging.info('####### DAG ENDED #######')
