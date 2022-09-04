@@ -5,6 +5,7 @@
 import os
 import time
 import json
+import logging
 import requests
 import pandas as pd
 from dateutil import easter
@@ -54,6 +55,9 @@ DT_MINUS_ONE = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-
 DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
 
 
+logging.basicConfig(filename='logs/logs.log', filemode='a', format='%(asctime)s - %(message)s',
+                    datefmt='%d-%b-%y %H:%M:%S', level=logging.INFO)
+
 ###############################################################
 # Python Functions
 ###############################################################
@@ -63,7 +67,7 @@ def setup_business_dt(**kwargs):
     :return: formatted business date
     """
     # Format execution date
-    dt = (kwargs.get("execution_date", None)).strftime('%Y%m%d')
+    dt = (kwargs.get("execution_date", None)).strftime("%Y%m%d")
     return dt
 
 
@@ -97,49 +101,49 @@ def get_working_days(ingest_path, first_year, last_year, weekmask):
     for year in years:
         # Get Polish holidays
         easter_sunday = easter.easter(year)
-        holidays = {'New Year': date(year, 1, 1),
-                    'Trzech Kroli': date(year, 1, 6),
-                    'Easter Sunday': easter_sunday,
-                    'Easter Monday': easter_sunday + timedelta(days=1),
-                    'Labor Day': date(year, 5, 1),
-                    'Constitution Day': date(year, 5, 3),
-                    'Pentecost Sunday': easter_sunday + relativedelta(days=+1, weekday=SU(+7)),
-                    'Corpus Christi': easter_sunday + relativedelta(weekday=TH(+9)),
-                    'Assumption of the Blessed Virgin Mary': date(year, 8, 15),
-                    'All Saints\' Day': date(year, 11, 1),
-                    'Independence Day': date(year, 11, 11),
-                    'Christmas  Day': date(year, 12, 25),
-                    'Boxing Day': date(year, 12, 26),
+        holidays = {"New Year": date(year, 1, 1),
+                    "Trzech Kroli": date(year, 1, 6),
+                    "Easter Sunday": easter_sunday,
+                    "Easter Monday": easter_sunday + timedelta(days=1),
+                    "Labor Day": date(year, 5, 1),
+                    "Constitution Day": date(year, 5, 3),
+                    "Pentecost Sunday": easter_sunday + relativedelta(days=+1, weekday=SU(+7)),
+                    "Corpus Christi": easter_sunday + relativedelta(weekday=TH(+9)),
+                    "Assumption of the Blessed Virgin Mary": date(year, 8, 15),
+                    "All Saints\' Day": date(year, 11, 1),
+                    "Independence Day": date(year, 11, 11),
+                    "Christmas  Day": date(year, 12, 25),
+                    "Boxing Day": date(year, 12, 26),
                     }
 
         # Insert holidays into data frame
         df = pd.concat([df, pd.DataFrame([holidays])], ignore_index=True)
-        df.index.names = ['id']
+        df.index.names = ["id"]
 
         # Transpose data frame
         df_t = df.transpose(copy=True)
 
         # Clean data frame
-        df_t = df_t.stack().reset_index(name='date').rename(columns={'level_0': 'holiday', 'id': 'year_id'})
-        df_t = df_t.drop(columns='year_id')
-        df_t['date'] = pd.to_datetime(df_t['date'])
+        df_t = df_t.stack().reset_index(name="date").rename(columns={"level_0": "holiday", "id": "year_id"})
+        df_t = df_t.drop(columns="year_id")
+        df_t["date"] = pd.to_datetime(df_t["date"])
 
     # Get working days excluding dates for Polish holidays
     working_days = pd.DataFrame(
         pd.bdate_range(
             start=f"1/1/{first_year}",
             end=f"1/1/{last_year}",
-            holidays=list(df_t['date']),
+            holidays=list(df_t["date"]),
             weekmask=weekmask,
-            freq='C'),
-        columns=['date']
+            freq="C"),
+        columns=["date"]
     )
 
     # Drop duplicates if exist
     working_days.drop_duplicates(inplace=True)
 
     # Save output as CSV
-    working_days.to_csv(f'{ingest_path}/working_days.csv', index=False)
+    working_days.to_csv(f"{ingest_path}/working_days.csv", index=False)
 
 
 def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt, dt_minus_one):
@@ -158,7 +162,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
 
     # Get custom calendar of working days in Poland
     df = pd.read_csv(file, infer_datetime_format=True)
-    df['date'] = df['date'].astype('datetime64[ns]')
+    df["date"] = df["date"].astype("datetime64[ns]")
 
     # Get week day number from DT (execution date)
     day_number = pd.to_datetime(dt).weekday()
@@ -172,7 +176,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
         )
 
         # Check if (DT - 1) is in a calendar of working days in Poland
-        if str(dt_minus_one) in sorted(set(df['date'].astype('str'))):
+        if str(dt_minus_one) in sorted(set(df["date"].astype("str"))):
 
             # (DT -1) is a working day, get previous working day in Poland
             print("\nPrevious day is a working day: ", dt_minus_one)
@@ -187,10 +191,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
                     respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()[
-                        'rates']
+                        "rates"]
                     json_norm = json_normalize(respond)
-                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                    json_norm['exchange_rate'] = currency_code
+                    json_norm["effectiveDate"] = pd.to_datetime(json_norm["effectiveDate"])
+                    json_norm["exchange_rate"] = currency_code
                     print(json_norm)
                     output = pd.concat([output, json_norm], ignore_index=True)
                 except Exception:
@@ -205,22 +209,22 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             print("\nPrint APi output before replace:")
             print(output)
             print("\nPrint APi output after replace:")
-            output.loc[output['effectiveDate'] == str(dt_minus_one), 'effectiveDate'] = str(dt)
+            output.loc[output["effectiveDate"] == str(dt_minus_one), "effectiveDate"] = str(dt)
             print(output)
 
             # Save output as CSV
-            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+            output.to_csv(f"{ingest_path}/nbp_exchangerates_latest.csv", index=False, header=False)
 
         else:
             # (DT -1) is not a working day, get previous working day in Poland
             print("\nPrevious day not a working day: ", dt_minus_one)
             print("\nGet previous working day in Poland: ")
-            print(df[df['date'] < dt_minus_one])
-            previous_days = df[df['date'] < dt_minus_one]
+            print(df[df["date"] < dt_minus_one])
+            previous_days = df[df["date"] < dt_minus_one]
 
             print("\nMax index value:")
-            print(previous_days.loc[previous_days['date'].idxmax()][0])
-            previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
+            print(previous_days.loc[previous_days["date"].idxmax()][0])
+            previous_working_day = (previous_days.loc[previous_days["date"].idxmax()][0]).strftime("%Y-%m-%d")
             print("\nprevious_working_day: ", previous_working_day)
 
             # Sleep to not overload NBP's API with queries
@@ -233,10 +237,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}")
                     respond = requests.get(
-                        f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                        f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()["rates"]
                     json_norm = json_normalize(respond)
-                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                    json_norm['exchange_rate'] = currency_code
+                    json_norm["effectiveDate"] = pd.to_datetime(json_norm["effectiveDate"])
+                    json_norm["exchange_rate"] = currency_code
                     print(json_norm)
                     output = pd.concat([output, json_norm], ignore_index=True)
                 except Exception:
@@ -251,17 +255,17 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             print("\nPrint APi output before replace:")
             print(output)
             print("\nPrint APi output after replace:")
-            output.loc[output['effectiveDate'] == str(previous_working_day), 'effectiveDate'] = str(dt)
+            output.loc[output["effectiveDate"] == str(previous_working_day), "effectiveDate"] = str(dt)
             print(output)
 
             # Save output as CSV
-            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+            output.to_csv(f"{ingest_path}/nbp_exchangerates_latest.csv", index=False, header=False)
 
     else:
         print("\nWeekday- Get Exchange rates from previous working day. Week day number: ", day_number)
 
         # Check if (DT - 1) in a calendar of Working Days in Poland
-        if str(dt_minus_one) in sorted(set(df['date'].astype('str'))):
+        if str(dt_minus_one) in sorted(set(df["date"].astype("str"))):
 
             # (DT -1) is a working day, get previous working day in Poland
             print("\nPrevious day is a working day: ", dt_minus_one)
@@ -276,10 +280,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
                     respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()[
-                        'rates']
+                        "rates"]
                     json_norm = json_normalize(respond)
-                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                    json_norm['exchange_rate'] = currency_code
+                    json_norm["effectiveDate"] = pd.to_datetime(json_norm["effectiveDate"])
+                    json_norm["exchange_rate"] = currency_code
                     print(json_norm)
                     output = pd.concat([output, json_norm], ignore_index=True)
                 except Exception:
@@ -294,22 +298,22 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             print("\nPrint APi output before replace:")
             print(output)
             print("\nPrint APi output after replace:")
-            output.loc[output['effectiveDate'] == str(dt_minus_one), 'effectiveDate'] = str(dt)
+            output.loc[output["effectiveDate"] == str(dt_minus_one), "effectiveDate"] = str(dt)
             print(output)
 
             # Save output as CSV
-            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+            output.to_csv(f"{ingest_path}/nbp_exchangerates_latest.csv", index=False, header=False)
 
         else:
             # (DT -1) is not a working day, get previous working day in Poland
             print("\nPrevious day not a working day: ", dt_minus_one)
             print("\nGet previous working day in Poland: ")
-            print(df[df['date'] < dt_minus_one])
-            previous_days = df[df['date'] < dt_minus_one]
+            print(df[df["date"] < dt_minus_one])
+            previous_days = df[df["date"] < dt_minus_one]
 
             print("\nMax index value:")
-            print(previous_days.loc[previous_days['date'].idxmax()][0])
-            previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
+            print(previous_days.loc[previous_days["date"].idxmax()][0])
+            previous_working_day = (previous_days.loc[previous_days["date"].idxmax()][0]).strftime("%Y-%m-%d")
             print("\nprevious_working_day: ", previous_working_day)
 
             # Sleep to not overload NBP's API with queries
@@ -322,10 +326,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}")
                     respond = requests.get(
-                        f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                        f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()["rates"]
                     json_norm = json_normalize(respond)
-                    json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
-                    json_norm['exchange_rate'] = currency_code
+                    json_norm["effectiveDate"] = pd.to_datetime(json_norm["effectiveDate"])
+                    json_norm["exchange_rate"] = currency_code
                     print(json_norm)
                     output = pd.concat([output, json_norm], ignore_index=True)
                 except Exception:
@@ -340,11 +344,11 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             print("\nPrint APi output before replace:")
             print(output)
             print("\nPrint APi output after replace:")
-            output.loc[output['effectiveDate'] == str(previous_working_day), 'effectiveDate'] = str(dt)
+            output.loc[output["effectiveDate"] == str(previous_working_day), "effectiveDate"] = str(dt)
             print(output)
 
             # Save output as CSV
-            output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
+            output.to_csv(f"{ingest_path}/nbp_exchangerates_latest.csv", index=False, header=False)
 
 
 def append_latest_exchange_rate(ingest_path, nbp_exchange_rates_latest):
@@ -362,7 +366,7 @@ def append_latest_exchange_rate(ingest_path, nbp_exchange_rates_latest):
     df.drop_duplicates(inplace=True)
 
     # Save output as CSV
-    df.to_csv(f'{ingest_path}/nbp_exchangerates.csv', mode='a', index=False)
+    df.to_csv(f"{ingest_path}/nbp_exchangerates.csv", mode="a", index=False)
 
 
 def merge_exchange_rates(curated_path, excursions, nbp_exchange_rates):
@@ -383,16 +387,16 @@ def merge_exchange_rates(curated_path, excursions, nbp_exchange_rates):
     # Merge both data sets
     output = df_1.merge(
         df_2,
-        how='left',
-        left_on=['SP_TourDate', 'SP_PaidCurrency'],
-        right_on=['effectiveDate', 'exchange_rate']
+        how="left",
+        left_on=["SP_TourDate", "SP_PaidCurrency"],
+        right_on=["effectiveDate", "exchange_rate"]
     )
 
     # Drop duplicates if exist
     output.drop_duplicates(inplace=True)
 
     # Save output to CSV
-    output.to_csv(f'{curated_path}/nbp_exchangerates.csv', index=False)
+    output.to_csv(f"{curated_path}/nbp_exchangerates.csv", index=False)
 
 
 def calculate_values(curated_path, business_ready_path):
@@ -406,20 +410,20 @@ def calculate_values(curated_path, business_ready_path):
     print(df_1.shape)
 
     # Clean data
-    df_1.drop(columns=['no', 'effectiveDate', 'exchange_rate'], inplace=True)
-    df_1['SP_Paid'] = df_1['SP_Paid'].str.replace(',', '.')
-    df_1['SP_ValueCalculated'] = (df_1['SP_Paid']).apply(float) * df_1['mid'].apply(float)
+    df_1.drop(columns=["no", "effectiveDate", "exchange_rate"], inplace=True)
+    df_1["SP_Paid"] = df_1["SP_Paid"].str.replace(",", ".")
+    df_1["SP_ValueCalculated"] = (df_1["SP_Paid"]).apply(float) * df_1["mid"].apply(float)
     df_1.rename(columns={"mid": "SP_ExchangeRate"}, inplace=True)
 
     # Reorder columns
-    new_cols = [col for col in df_1.columns if col != 'SP_ExchangeRate'] + ['SP_ExchangeRate']
+    new_cols = [col for col in df_1.columns if col != "SP_ExchangeRate"] + ["SP_ExchangeRate"]
     output = df_1[new_cols]
 
     # Drop duplicates if exist
     output.drop_duplicates(inplace=True)
 
     # Save output as CSV
-    output.to_csv(f'{business_ready_path}/nbp_exchangerates.csv', index=False)
+    output.to_csv(f"{business_ready_path}/nbp_exchangerates.csv", index=False)
 
 
 ###############################################################
@@ -529,10 +533,10 @@ get_working_days = PythonOperator(
     task_id="t_get_working_days",
     python_callable=get_working_days,
     op_kwargs={
-        'ingest_path': INGEST_PATH,
-        'first_year': 2019,
-        'last_year': 2023,
-        'weekmask': "Mon Tue Wed Thu Fri"
+        "ingest_path": INGEST_PATH,
+        "first_year": 2019,
+        "last_year": 2023,
+        "weekmask": "Mon Tue Wed Thu Fri"
     },
     dag=dag
 )
@@ -562,14 +566,14 @@ check_if_nbp_exchange_rates_ingest_schema_exists = PythonOperator(
 # CHECK IF ONLY ONE TASK FAILED
 check_one_failed = DummyOperator(
     task_id="t_check_one_failed",
-    trigger_rule='one_failed',
+    trigger_rule="one_failed",
     dag=dag
 )
 
 # CHECK IF ALL TASKS ARE SUCCEDED
 check_all_success = DummyOperator(
     task_id="t_check_all_success",
-    trigger_rule='all_success',
+    trigger_rule="all_success",
     dag=dag
 )
 
@@ -578,14 +582,14 @@ get_latest_exchange_rates = PythonOperator(
     task_id="t_get_latest_exchange_rates",
     python_callable=get_latest_exchange_rates,
     op_kwargs={
-        'ingest_path': INGEST_PATH,
+        "ingest_path": INGEST_PATH,
         "file": f"{INGEST_PATH}/working_days.csv",
-        'currency_codes': CURRENCY_CODES,
-        'url_nbp_api': URL_NBP_API,
-        'dt': DT_MACRO,
-        'dt_minus_one': DT_MINUS_ONE
+        "currency_codes": CURRENCY_CODES,
+        "url_nbp_api": URL_NBP_API,
+        "dt": DT_MACRO,
+        "dt_minus_one": DT_MINUS_ONE
     },
-    trigger_rule='one_success',
+    trigger_rule="one_success",
     dag=dag
 )
 
@@ -594,10 +598,10 @@ append_latest_exchange_rate = PythonOperator(
     task_id="t_append_latest_exchange_rate",
     python_callable=append_latest_exchange_rate,
     op_kwargs={
-        'ingest_path': INGEST_PATH,
-        'nbp_exchange_rates_latest': NBP_EXCHANGE_RATES_LATEST
+        "ingest_path": INGEST_PATH,
+        "nbp_exchange_rates_latest": NBP_EXCHANGE_RATES_LATEST
     },
-    trigger_rule='one_success',
+    trigger_rule="one_success",
     dag=dag
 )
 
@@ -608,11 +612,11 @@ merge_exchange_rates = PythonOperator(
     task_id="t_merge_exchange_rates",
     python_callable=merge_exchange_rates,
     op_kwargs={
-        'curated_path': CURATED_PATH,
-        'excursions': EXCURSIONS,
-        'nbp_exchange_rates': NBP_EXCHANGE_RATES
+        "curated_path": CURATED_PATH,
+        "excursions": EXCURSIONS,
+        "nbp_exchange_rates": NBP_EXCHANGE_RATES
     },
-    trigger_rule='one_success',
+    trigger_rule="one_success",
     dag=dag
 )
 
@@ -621,10 +625,10 @@ calculate_values = PythonOperator(
     task_id="t_calculate_values",
     python_callable=calculate_values,
     op_kwargs={
-        'curated_path': CURATED_PATH,
-        'business_ready_path': BUSINESS_READY_PATH
+        "curated_path": CURATED_PATH,
+        "business_ready_path": BUSINESS_READY_PATH
     },
-    trigger_rule='one_success',
+    trigger_rule="one_success",
     dag=dag
 )
 
@@ -636,7 +640,7 @@ get_end_datetime = BashOperator(
     end_date=$(date)
     echo $end_date;
     """,
-    trigger_rule='one_success',
+    trigger_rule="one_success",
     dag=dag
 )
 
