@@ -67,22 +67,6 @@ def setup_business_dt(**kwargs):
     return dt
 
 
-def check_if_working_day(file, dt):
-    """CHECK IF GIVEN DATE IS A WORKING DAY IN POLAND
-    :param file: reads custom calendar of working days in Poland from a file path
-    :param dt: formatted business date
-    :return: None
-    """
-    # Get a calendar of working days in Poland
-    df = pd.read_csv(file)
-
-    # Check if given date in a calendar of working days in Poland
-    if dt in sorted(set(df['date'])):
-        print("WORKDAY. CONTINUE WITH PROCESS.")
-    else:
-        raise AirflowException("HOLIDAY. STOPPING PROCESS.")
-
-
 def check_if_file_exists(file):
     """CHECK IF GIVEN FILE EXISTS
     :param file: provide file path
@@ -168,39 +152,37 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
     :param dt_minus_one: a day before dt
     :return: None
     """
-
+    # Print DT (execution date) and DT - 1 to log
     print("\nCurrent dt: ", dt)
     print("\ndt_minus_one: ", dt_minus_one)
 
-    # Get calendar of working days in Poland
+    # Get custom calendar of working days in Poland
     df = pd.read_csv(file, infer_datetime_format=True)
     df['date'] = df['date'].astype('datetime64[ns]')
-    print(df.info())
-    print(df)
 
-    # Convert DT to datetime
+    # Get week day number from DT (execution date)
     day_number = pd.to_datetime(dt).weekday()
 
-    if day_number in (0, 5, 6):  # 0 Monday, Saturday, Sunday
+    # Process weekends and Mondays
+    if day_number in (0, 5, 6):
         print(
-            """Monday, Saturday or Sunday - Get Exchange rates from previous working day.
+            """\nMonday, Saturday or Sunday - Get Exchange rates from previous working day.
             Week Day number: """,
             day_number
         )
 
-        # Check if (DT - 1) in a calendar of working days in Poland
+        # Check if (DT - 1) is in a calendar of working days in Poland
         if str(dt_minus_one) in sorted(set(df['date'].astype('str'))):
 
-            # (DT -1) is a Working day
-            # Get previous working day in Poland
-            print("Previous day is a working day: ", dt_minus_one)
+            # (DT -1) is a working day, get previous working day in Poland
+            print("\nPrevious day is a working day: ", dt_minus_one)
 
+            # Sleep to not overload NBP's API with queries
             time.sleep(3)
             output = pd.DataFrame()
 
-            # Get NBP exchange rates data
+            # Get NBP's exchange rates data
             for currency_code in currency_codes:
-                # if currency_code != 'RUB':
                 print(currency_code)
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
@@ -217,14 +199,12 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
 
-            # Replace of date
-            print("Print current date used to replace date of last working day")
+            # Replace a date of previous working day with dt (execution date)
+            print("\nPrint current date used to replace date of last working day")
             print(dt)
-            print("Print APi output before replace:")
+            print("\nPrint APi output before replace:")
             print(output)
-            # Replace API date - here a date of last working day - with DAGs Execution date
-            # to allow for correct left join in merge by date and exchange rate type
-            print("Print APi output after replace:")
+            print("\nPrint APi output after replace:")
             output.loc[output['effectiveDate'] == str(dt_minus_one), 'effectiveDate'] = str(dt)
             print(output)
 
@@ -232,22 +212,22 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
         else:
-            # (DT -1) is not a Working day
-            # Get previous working day in Poland
-            print("Previous day not a working day: ", dt_minus_one)
-            print("Get previous working day in Poland: ")
+            # (DT -1) is not a working day, get previous working day in Poland
+            print("\nPrevious day not a working day: ", dt_minus_one)
+            print("\nGet previous working day in Poland: ")
             print(df[df['date'] < dt_minus_one])
             previous_days = df[df['date'] < dt_minus_one]
 
-            print('Max index value:')
+            print("\nMax index value:")
             print(previous_days.loc[previous_days['date'].idxmax()][0])
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
-            print("previous_working_day: ", previous_working_day)
+            print("\nprevious_working_day: ", previous_working_day)
 
+            # Sleep to not overload NBP's API with queries
             time.sleep(3)
             output = pd.DataFrame()
 
-            # Get NBP exchange rates data
+            # Get NBP's exchange rates data
             for currency_code in currency_codes:
                 print(currency_code)
                 try:
@@ -265,14 +245,12 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
 
-            # Replace of date
-            print("Print current date used to replace date of last working day")
+            # Replace a date of previous working day with dt (execution date)
+            print("\nPrint current date used to replace date of last working day")
             print(dt)
-            print("Print APi output before replace:")
+            print("\nPrint APi output before replace:")
             print(output)
-            # Replace API date - here a date of last working day - with DAGs Execution date
-            # to allow for correct left join in merge by date and exchange rate type
-            print("Print APi output after replace:")
+            print("\nPrint APi output after replace:")
             output.loc[output['effectiveDate'] == str(previous_working_day), 'effectiveDate'] = str(dt)
             print(output)
 
@@ -280,19 +258,19 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
     else:
-        print("Weekday- Get Exchange rates from previous working day. Week day number: ", day_number)
+        print("\nWeekday- Get Exchange rates from previous working day. Week day number: ", day_number)
 
         # Check if (DT - 1) in a calendar of Working Days in Poland
         if str(dt_minus_one) in sorted(set(df['date'].astype('str'))):
 
-            # (DT -1) is a Working day
-            # Get previous working day in Poland
-            print("Previous day is a working day: ", dt_minus_one)
+            # (DT -1) is a working day, get previous working day in Poland
+            print("\nPrevious day is a working day: ", dt_minus_one)
 
+            # Sleep to not overload NBP's API with queries
             time.sleep(3)
             output = pd.DataFrame()
 
-            # Get NBP exchange rates data
+            # Get NBP's exchange rates data
             for currency_code in currency_codes:
                 print(currency_code)
                 try:
@@ -310,14 +288,12 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
 
-            # Replace of date
-            print("Print current date used to replace date of last working day")
+            # Replace a date of previous working day with dt (execution date)
+            print("\nPrint current date used to replace date of last working day")
             print(dt)
-            print("Print APi output before replace:")
+            print("\nPrint APi output before replace:")
             print(output)
-            # Replace API date - here a date of last working day - with DAGs Execution date
-            # to allow for correct left join in merge by date and exchange rate type
-            print("Print APi output after replace:")
+            print("\nPrint APi output after replace:")
             output.loc[output['effectiveDate'] == str(dt_minus_one), 'effectiveDate'] = str(dt)
             print(output)
 
@@ -325,22 +301,22 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
         else:
-            # (DT -1) is not a Working Day in Poland
-            # Get previous working day in Poland
-            print("Previous day not a working day: ", dt_minus_one)
-            print("Get previous working day in Poland: ")
+            # (DT -1) is not a working day, get previous working day in Poland
+            print("\nPrevious day not a working day: ", dt_minus_one)
+            print("\nGet previous working day in Poland: ")
             print(df[df['date'] < dt_minus_one])
             previous_days = df[df['date'] < dt_minus_one]
 
-            print('Max index value:')
+            print("\nMax index value:")
             print(previous_days.loc[previous_days['date'].idxmax()][0])
             previous_working_day = (previous_days.loc[previous_days['date'].idxmax()][0]).strftime("%Y-%m-%d")
-            print("previous_working_day: ", previous_working_day)
+            print("\nprevious_working_day: ", previous_working_day)
 
+            # Sleep to not overload NBP's API with queries
             time.sleep(3)
             output = pd.DataFrame()
 
-            # Get NBP exchange rates data
+            # Get NBP's exchange rates data
             for currency_code in currency_codes:
                 print(currency_code)
                 try:
@@ -358,14 +334,12 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             # Drop duplicates if exist
             output.drop_duplicates(inplace=True)
 
-            # Replace of date
-            print("Print current date used to replace date of last working day")
+            # Replace a date of previous working day with dt (execution date)
+            print("\nPrint current date used to replace date of last working day")
             print(dt)
-            print("Print APi output before replace:")
+            print("\nPrint APi output before replace:")
             print(output)
-            # Replace API date - here a date of last working day - with DAGs Execution date
-            # to allow for correct left join in merge by date and exchange rate type
-            print("Print APi output after replace:")
+            print("\nPrint APi output after replace:")
             output.loc[output['effectiveDate'] == str(previous_working_day), 'effectiveDate'] = str(dt)
             print(output)
 
