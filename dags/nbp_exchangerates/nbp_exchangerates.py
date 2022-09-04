@@ -17,7 +17,6 @@ from airflow.operators.bash_operator import BashOperator
 from airflow.operators.dummy_operator import DummyOperator
 from airflow.operators.python_operator import PythonOperator
 
-
 ###############################################################
 # Parameters
 ###############################################################
@@ -39,14 +38,13 @@ PYTHON_SCRIPTS_PATH = f"{SCRIPTS_PATH}/python"
 
 # Load JSON Config
 json_config = json.load(open(CONFIG_JSON, "r"))
-URL_NBP_API= json_config["URL_NBP_API"]
+URL_NBP_API = json_config["URL_NBP_API"]
 OWNER = json_config["OWNER"]
 EMAIL = json_config["EMAIL"]
 TAGS = json_config["TAGS"]
 CURRENCY_CODES = json_config["CURRENCY_CODES"]
 DAG_ID = json_config["DAG_ID"]
 DESCRIPTION = json_config["DESCRIPTION"]
-
 
 # Dates
 TODAY = date.today()
@@ -56,26 +54,24 @@ DT_MINUS_ONE = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-
 DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
 
 
-
 ###############################################################
 # Python Functions
 ###############################################################
-# GET BUSINESS DATE FROM AIRFLOW'S EXECUTION DATE
 def setup_business_dt(**kwargs):
+    """GET BUSINESS DATE FROM AIRFLOW'S EXECUTION DATE
+    :param kwargs: pass any number of keyword arguments from dictionary
+    :return: formatted business date
     """
-    :param kwargs:
-    :return:
-    """
+    # Format execution date
     dt = (kwargs.get("execution_date", None)).strftime('%Y%m%d')
     return dt
 
 
-# CHECK IF GIVEN DATE IS A WORKING DAY IN POLAND
 def check_if_working_day(file, dt):
-    """
-    :param file:
-    :param dt:
-    :return:
+    """CHECK IF GIVEN DATE IS A WORKING DAY IN POLAND
+    :param file: reads custom calendar of working days in Poland from a file path
+    :param dt: formatted business date
+    :return: None
     """
     # Get a calendar of working days in Poland
     df = pd.read_csv(file)
@@ -87,11 +83,10 @@ def check_if_working_day(file, dt):
         raise AirflowException("HOLIDAY. STOPPING PROCESS.")
 
 
-# CHECK IF GIVEN FILE EXISTS
 def check_if_file_exists(file):
-    """
-    :param file:
-    :return:
+    """CHECK IF GIVEN FILE EXISTS
+    :param file: provide file path
+    :return: None
     """
     # Check if given files exists
     if os.path.exists(file):
@@ -100,13 +95,12 @@ def check_if_file_exists(file):
         raise AirflowException("MISSING INPUT DATA OR OUTPUT SCHEMA")
 
 
-# GET A CALENDAR OF WORKING DAY IN POLAND
 def get_working_days(ingest_path, first_year, last_year, weekmask):
-    """
-    :param ingest_path:
-    :param first_year:
-    :param last_year:
-    :param weekmask:
+    """GET A CALENDAR OF WORKING DAYS IN POLAND
+    :param ingest_path: path where custom calendar is saved
+    :param first_year: provide first year for custom calendar
+    :param last_year: provide last year for custom calendar
+    :param weekmask: weekmask of valid business days in Poland
     :return:
     """
     # Get a range of years
@@ -117,7 +111,6 @@ def get_working_days(ingest_path, first_year, last_year, weekmask):
 
     # Loop over years
     for year in years:
-
         # Get Polish holidays
         easter_sunday = easter.easter(year)
         holidays = {'New Year': date(year, 1, 1),
@@ -165,16 +158,15 @@ def get_working_days(ingest_path, first_year, last_year, weekmask):
     working_days.to_csv(f'{ingest_path}/working_days.csv', index=False)
 
 
-# GET NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY
 def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt, dt_minus_one):
-    """
-    :param ingest_path:
-    :param file:
-    :param currency_codes:
-    :param url_nbp_api:
-    :param dt:
-    :param dt_minus_one:
-    :return:
+    """GET NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY
+    :param ingest_path: path where the latest daily exchange rates are saved
+    :param file: path to custom calendar of working days in Poland
+    :param currency_codes: list of currency codes to get from NBP's API
+    :param url_nbp_api: URL allowing to query for currency codes
+    :param dt: formatted business date
+    :param dt_minus_one: a day before dt
+    :return: None
     """
 
     print("\nCurrent dt: ", dt)
@@ -212,7 +204,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 print(currency_code)
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()[
+                        'rates']
                     json_norm = json_normalize(respond)
                     json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
                     json_norm['exchange_rate'] = currency_code
@@ -259,7 +252,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 print(currency_code)
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}")
-                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                    respond = requests.get(
+                        f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
                     json_norm = json_normalize(respond)
                     json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
                     json_norm['exchange_rate'] = currency_code
@@ -303,7 +297,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 print(currency_code)
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()['rates']
+                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()[
+                        'rates']
                     json_norm = json_normalize(respond)
                     json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
                     json_norm['exchange_rate'] = currency_code
@@ -350,7 +345,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
                 print(currency_code)
                 try:
                     print(f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}")
-                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
+                    respond = requests.get(
+                        f"{url_nbp_api}/{currency_code}/{previous_working_day}/{previous_working_day}/").json()['rates']
                     json_norm = json_normalize(respond)
                     json_norm['effectiveDate'] = pd.to_datetime(json_norm['effectiveDate'])
                     json_norm['exchange_rate'] = currency_code
@@ -377,12 +373,11 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             output.to_csv(f'{ingest_path}/nbp_exchangerates_latest.csv', index=False, header=False)
 
 
-# APPEND NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND
 def append_latest_exchange_rate(ingest_path, nbp_exchange_rates_latest):
-    """
-    :param ingest_path:
-    :param nbp_exchange_rates_latest:
-    :return:
+    """APPEND NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND
+    :param ingest_path: path where exchange rates schema is stored along with new, daily inputs
+    :param nbp_exchange_rates_latest: path where the latest daily exchange rates are saved
+    :return: None
     """
 
     # Insert the most recent exchange rates for previous working day
@@ -396,13 +391,12 @@ def append_latest_exchange_rate(ingest_path, nbp_exchange_rates_latest):
     df.to_csv(f'{ingest_path}/nbp_exchangerates.csv', mode='a', index=False)
 
 
-# INSERT NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND TO EXCURSIONS TABLE
 def merge_exchange_rates(curated_path, excursions, nbp_exchange_rates):
-    """
-    :param curated_path:
-    :param excursions:
-    :param nbp_exchange_rates:
-    :return:
+    """INSERT NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND TO EXCURSIONS TABLE
+    :param curated_path: path where merged data is stored
+    :param excursions: path where excursion input is stored
+    :param nbp_exchange_rates: path where exchange rates schema is stored along with new, daily inputs
+    :return: None
     """
     # Get excursions data
     df_1 = pd.read_csv(excursions)
@@ -427,11 +421,10 @@ def merge_exchange_rates(curated_path, excursions, nbp_exchange_rates):
     output.to_csv(f'{curated_path}/nbp_exchangerates.csv', index=False)
 
 
-# CALCULATE VALUES FOR PAID EXCURSIONS IN PLN AND SAVE OUTPUT AS AVRO
 def calculate_values(curated_path, business_ready_path):
-    """
-    :param curated_path:
-    :param business_ready_path:
+    """CALCULATE VALUES FOR PAID EXCURSIONS IN PLN
+    :param curated_path: path where merged data is stored
+    :param business_ready_path:  path where business ready data is stored
     :return:
     """
     # Get merged data
@@ -440,7 +433,7 @@ def calculate_values(curated_path, business_ready_path):
 
     # Clean data
     df_1.drop(columns=['no', 'effectiveDate', 'exchange_rate'], inplace=True)
-    df_1['SP_Paid'] = df_1['SP_Paid'].str.replace(',','.')
+    df_1['SP_Paid'] = df_1['SP_Paid'].str.replace(',', '.')
     df_1['SP_ValueCalculated'] = (df_1['SP_Paid']).apply(float) * df_1['mid'].apply(float)
     df_1.rename(columns={"mid": "SP_ExchangeRate"}, inplace=True)
 
@@ -461,7 +454,6 @@ def calculate_values(curated_path, business_ready_path):
 default_args = {
     "owner": OWNER,
     "depends_on_past": False,
-    # "start_date": datetime(2022, 8, 1),
     "start_date": datetime(2019, 6, 1),
     "email": EMAIL,
     "email_on_failure": False,
@@ -474,13 +466,11 @@ default_args = {
 dag = DAG(
     dag_id=DAG_ID,
     description=DESCRIPTION,
-    # schedule_interval="0 1 * * 1-5",
     schedule_interval="0 1 * * *",
     default_args=default_args,
     catchup=True,
     max_active_runs=1
 )
-
 
 ###############################################################
 # Tasks
@@ -496,7 +486,6 @@ get_start_datetime = BashOperator(
     dag=dag
 )
 
-
 # CREATE TRANSFER PATH IN NOT EXISTS
 get_transfer_path = BashOperator(
     task_id="t_get_transfer_path",
@@ -510,7 +499,6 @@ get_transfer_path = BashOperator(
     """,
     dag=dag
 )
-
 
 # CREATE INGEST PATH IN NOT EXISTS
 get_ingest_path = BashOperator(
@@ -526,7 +514,6 @@ get_ingest_path = BashOperator(
     dag=dag
 )
 
-
 # CREATE CURATED PATH IN NOT EXISTS
 get_curated_path = BashOperator(
     task_id="t_get_curated_path",
@@ -540,7 +527,6 @@ get_curated_path = BashOperator(
     """,
     dag=dag
 )
-
 
 # CREATE BUSINESS READY PATH IN NOT EXISTS
 get_business_ready_path = BashOperator(
@@ -556,8 +542,7 @@ get_business_ready_path = BashOperator(
     dag=dag
 )
 
-
-# GET BUSINESS DATE FROM AIRFLOW'S EXECUTION DATE
+# GET BUSINESS DATE FROM EXECUTION DATE
 get_setup_business_dt = PythonOperator(
     task_id="t_get_setup_business_dt",
     provide_context=True,
@@ -565,8 +550,7 @@ get_setup_business_dt = PythonOperator(
     dag=dag
 )
 
-
-# GET A CALENDAR OF WORKING DAY IN POLAND
+# GET A CUSTOM CALENDAR OF WORKING DAYS IN POLAND
 get_working_days = PythonOperator(
     task_id="t_get_working_days",
     python_callable=get_working_days,
@@ -579,7 +563,6 @@ get_working_days = PythonOperator(
     dag=dag
 )
 
-
 # CHECK IF EXCURSIONS FILE EXISTS
 check_if_excursions_exists = PythonOperator(
     task_id="t_check_if_excursions_exists",
@@ -591,8 +574,7 @@ check_if_excursions_exists = PythonOperator(
     dag=dag
 )
 
-
-# CHECK IF NBP EXCHANGE RATES FILE EXIST
+# CHECK IF NBP EXCHANGE RATES FILE EXISTS
 check_if_nbp_exchange_rates_ingest_schema_exists = PythonOperator(
     task_id="t_check_if_nbp_exchange_rates_ingest_schema_exists",
     provide_context=False,
@@ -603,7 +585,6 @@ check_if_nbp_exchange_rates_ingest_schema_exists = PythonOperator(
     dag=dag
 )
 
-
 # CHECK IF ONLY ONE TASK FAILED
 check_one_failed = DummyOperator(
     task_id="t_check_one_failed",
@@ -611,14 +592,12 @@ check_one_failed = DummyOperator(
     dag=dag
 )
 
-
 # CHECK IF ALL TASKS ARE SUCCEDED
 check_all_success = DummyOperator(
     task_id="t_check_all_success",
     trigger_rule='all_success',
     dag=dag
 )
-
 
 # GET NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY
 get_latest_exchange_rates = PythonOperator(
@@ -636,8 +615,7 @@ get_latest_exchange_rates = PythonOperator(
     dag=dag
 )
 
-
-# APPEND NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND
+# APPEND NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND TO THE DICTIONARY OF CURRENCY RATES
 append_latest_exchange_rate = PythonOperator(
     task_id="t_append_latest_exchange_rate",
     python_callable=append_latest_exchange_rate,
@@ -649,9 +627,9 @@ append_latest_exchange_rate = PythonOperator(
     dag=dag
 )
 
-
-# MERGE NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND AS DT (CURRENT EXECUTION DATE) TO DATE OF EXCURSIONS TABLE
-# IN OTHER WORDS: A MERGE IS DONE BY EXCHANGE RATE AND PREVIOUS WORKING DATE REPLACED WITH CURRENT DATE
+# MERGE NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY IN POLAND AS DT (CURRENT EXECUTION DATE)
+# TO DATES FROM EXCURSIONS TABLE
+# A MERGE IS DONE BY REPLACEMENT OF PREVIOUS WORKING DAY WITH CURRENT DATE (DT)
 merge_exchange_rates = PythonOperator(
     task_id="t_merge_exchange_rates",
     python_callable=merge_exchange_rates,
@@ -664,8 +642,7 @@ merge_exchange_rates = PythonOperator(
     dag=dag
 )
 
-
-# CALCULATE VALUES FOR PAID EXCURSIONS IN PLN
+# CALCULATE VALUES FOR EXCURSIONS IN PLN
 calculate_values = PythonOperator(
     task_id="t_calculate_values",
     python_callable=calculate_values,
@@ -676,7 +653,6 @@ calculate_values = PythonOperator(
     trigger_rule='one_success',
     dag=dag
 )
-
 
 # GET DATE TIME OF FINISHED DAG
 get_end_datetime = BashOperator(
@@ -689,7 +665,6 @@ get_end_datetime = BashOperator(
     trigger_rule='one_success',
     dag=dag
 )
-
 
 ###############################################################
 # Set Relations Between Tasks
