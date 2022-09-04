@@ -1,13 +1,14 @@
 ###############################################################
 # Author: Konrad Borowiec
-# Date: 2022-09-02
+# Date: 2022-09-04
 ###############################################################
 import os
 import time
 import json
-import logging
+# import logging
 import requests
 import pandas as pd
+import pandavro as pdx
 from dateutil import easter
 from dateutil.relativedelta import *
 from pandas.io.json import json_normalize
@@ -54,11 +55,6 @@ DT = '{{ ti.xcom_pull(task_ids="setup_business_dt", key="return_value") }}'
 DT_MINUS_ONE = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-%d") }}'
 DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
 
-
-logging.basicConfig(filename='logs/logs.log', filemode='a', format='%(asctime)s - %(message)s',
-                    datefmt='%d-%b-%y %H:%M:%S', level=logging.INFO)
-
-logging.info('####### DAG STARTED #######')
 
 #####################################################################################
 # Python Functions
@@ -428,6 +424,20 @@ def calculate_values(curated_path, business_ready_path):
     output.to_csv(f"{business_ready_path}/nbp_exchangerates.csv", index=False)
 
 
+def get_avro_output(business_ready_path):
+    """SAVE BUSINESS READY OUTPUT AS AVRO
+    :param business_ready_path: path where business ready data is stored
+    :return: None
+    """
+
+    # Read CSV business ready file as Pandas data frame
+    df = pd.read_csv(f"{business_ready_path}/nbp_exchangerates.csv")
+    print(df.shape)
+
+    # Save Pandas data frame as Avro
+    pdx.to_avro(f"{business_ready_path}nbp_exchangerates.avro", df)
+
+
 #####################################################################################
 # DAG Definition
 #####################################################################################
@@ -646,6 +656,17 @@ get_end_datetime = BashOperator(
     dag=dag
 )
 
+# SAVE TO AVRO
+get_avro_output = PythonOperator(
+    task_id="t_get_avro_output",
+    python_callable=get_avro_output,
+    op_kwargs={
+        "business_ready_path": BUSINESS_READY_PATH
+    },
+    trigger_rule="one_success",
+    dag=dag
+)
+
 #####################################################################################
 # Set Relations Between Tasks
 #####################################################################################
@@ -663,7 +684,5 @@ check_all_success >> get_latest_exchange_rates
 get_latest_exchange_rates >> append_latest_exchange_rate
 append_latest_exchange_rate >> merge_exchange_rates
 merge_exchange_rates >> calculate_values
-calculate_values >> get_end_datetime
-
-
-logging.info('####### DAG ENDED #######')
+calculate_values >> get_avro_output
+get_avro_output >> get_end_datetime
