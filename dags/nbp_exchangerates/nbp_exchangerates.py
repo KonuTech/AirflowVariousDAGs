@@ -1,183 +1,128 @@
-###############################################################
-# Author: Konrad Borowiec
-# Date: 2022-09-04
-###############################################################
+import csv
+import itertools
 import os
 import time
 import json
+from logging import getLogger
+from pathlib import Path
+
 # import logging
 import requests
 import pandas as pd
 import pandavro as pdx
 from dateutil import easter
+from dateutil import rrule
 from dateutil.relativedelta import *
 from pandas.io.json import json_normalize
 from datetime import date, datetime, timedelta
 from airflow import DAG
 from airflow import AirflowException
-from airflow.operators.bash_operator import BashOperator
-from airflow.operators.dummy_operator import DummyOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.bash import BashOperator
+from airflow.operators.empty import EmptyOperator as DummyOperator
+from airflow.operators.python import PythonOperator
+import typing as t
 
-###############################################################
-# Parameters
-###############################################################
-# Paths
+# env variables?
 SPARK_MASTER = "spark://spark:7077"
-ROOT_PATH_DAG = "/usr/local/airflow/dags/nbp_exchangerates"
-CONFIG_PATH = f"{ROOT_PATH_DAG}/config"
-CONFIG_JSON = f"{CONFIG_PATH}/config.json"
-TRANSFER_PATH = f"{ROOT_PATH_DAG}/transfer"
-EXCURSIONS = f"{TRANSFER_PATH}/excursions_data.csv"
-INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
-NBP_EXCHANGE_RATES = f"{INGEST_PATH}/nbp_exchangerates.csv"
-NBP_EXCHANGE_RATES_LATEST = f"{INGEST_PATH}/nbp_exchangerates_latest.csv"
-CURATED_PATH = f"{ROOT_PATH_DAG}/curated"
-BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
-SCRIPTS_PATH = f"{ROOT_PATH_DAG}/scripts"
-BASH_SCRIPTS_PATH = f"{SCRIPTS_PATH}/bash"
-PYTHON_SCRIPTS_PATH = f"{SCRIPTS_PATH}/python"
+ROOT_PATH_DAG = Path(os.environ.get("ROOT_PATH", Path(__file__).parent))
+CONFIG_JSON =  ROOT_PATH_DAG / "config" / "config.json"
+TRANSFER_PATH = ROOT_PATH_DAG / "transfer"
+EXCURSIONS =  TRANSFER_PATH / "excursions_data.csv"
+INGEST_PATH = ROOT_PATH_DAG / "ingest"
+NBP_EXCHANGE_RATES = INGEST_PATH  / "nbp_exchangerates.csv"
+NBP_EXCHANGE_RATES_LATEST = INGEST_PATH / "nbp_exchangerates_latest.csv"
+CURATED_PATH = ROOT_PATH_DAG / "curated"
+BUSINESS_READY_PATH = ROOT_PATH_DAG / "business_ready"
 
-# Load JSON Config
-json_config = json.load(open(CONFIG_JSON, "r"))
-URL_NBP_API = json_config["URL_NBP_API"]
-OWNER = json_config["OWNER"]
-EMAIL = json_config["EMAIL"]
-TAGS = json_config["TAGS"]
-CURRENCY_CODES = json_config["CURRENCY_CODES"]
-DAG_ID = json_config["DAG_ID"]
-DESCRIPTION = json_config["DESCRIPTION"]
+logger = getLogger(__name__)
 
-# Dates
-TODAY = date.today()
-YEARS = range(2019, 2023)
+class JsonConfig(t.TypedDict):
+    URL_NBP_API: str
+    OWNER: str
+    EMAIL: str
+    TAGS: t.Sequence[str]
+    CURRENCY_CODES: t.Sequence[str]
+    DAG_ID: str
+    DESCRIPTION: str
+
+
+# to jest bardzo złe. side effect przy importowanie modułu.
+with open(CONFIG_JSON) as f:
+    config: JsonConfig = json.load(f)
+
+# po co?
+# TODAY = date.today()
+# nigdzie nie było użyte
+#YEARS = range(2019, 2023)
 DT = '{{ ti.xcom_pull(task_ids="setup_business_dt", key="return_value") }}'
-DT_MINUS_ONE = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-%d") }}'
-DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
 
 
-#####################################################################################
-# Python Functions
-#####################################################################################
-def setup_business_dt(**kwargs):
-    """GET BUSINESS DATE FROM AIRFLOW'S EXECUTION DATE
-    :param kwargs: pass any number of keyword arguments from dictionary
-    :return: formatted business date
-    """
-    # Format execution date
-    dt = (kwargs.get("execution_date", None)).strftime("%Y%m%d")
-    return dt
+def setup_business_dt(execution_date: datetime, **kwargs) -> str:
+    return execution_date.strftime("%Y%m%d")
 
 
-def check_if_file_exists(file):
-    """CHECK IF GIVEN FILE EXISTS
-    :param file: provide file path
-    :return: None
-    """
-    # Check if given files exists
+# ensure_file_exists, .check_if_file_exists
+def check_if_file_exists(file: str) -> bool:
     if os.path.exists(file):
         return True
     else:
         raise AirflowException("MISSING INPUT DATA OR OUTPUT SCHEMA")
 
 
-def get_working_days(ingest_path, first_year, last_year, weekmask):
-    """GET A CALENDAR OF WORKING DAYS IN POLAND
-    :param ingest_path: path where custom calendar is saved
-    :param first_year: provide first year for custom calendar
-    :param last_year: provide last year for custom calendar
-    :param weekmask: weekmask of valid business days in Poland
-    :return:
-    """
-    # Get a range of years
-    years = range(first_year, last_year)
+def _holiday_for_year(year: int) -> t.Iterator[date]:
+    yield date(year, 1, 1)  # New Year
+    yield date(year, 1, 6)  # Trzech Kroli
 
-    # Get empty Pandas data frame
-    df = pd.DataFrame()
+    yield date(year, 5, 1)  # Labor Day
+    yield date(year, 5, 3)  # Constitution Day
 
-    # Loop over years
-    for year in years:
-        # Get Polish holidays
-        easter_sunday = easter.easter(year)
-        holidays = {"New Year": date(year, 1, 1),
-                    "Trzech Kroli": date(year, 1, 6),
-                    "Easter Sunday": easter_sunday,
-                    "Easter Monday": easter_sunday + timedelta(days=1),
-                    "Labor Day": date(year, 5, 1),
-                    "Constitution Day": date(year, 5, 3),
-                    "Pentecost Sunday": easter_sunday + relativedelta(days=+1, weekday=SU(+7)),
-                    "Corpus Christi": easter_sunday + relativedelta(weekday=TH(+9)),
-                    "Assumption of the Blessed Virgin Mary": date(year, 8, 15),
-                    "All Saints\' Day": date(year, 11, 1),
-                    "Independence Day": date(year, 11, 11),
-                    "Christmas  Day": date(year, 12, 25),
-                    "Boxing Day": date(year, 12, 26),
-                    }
-
-        # Insert holidays into data frame
-        df = pd.concat([df, pd.DataFrame([holidays])], ignore_index=True)
-        df.index.names = ["id"]
-
-        # Transpose data frame
-        df_t = df.transpose(copy=True)
-
-        # Clean data frame
-        df_t = df_t.stack().reset_index(name="date").rename(columns={"level_0": "holiday", "id": "year_id"})
-        df_t = df_t.drop(columns="year_id")
-        df_t["date"] = pd.to_datetime(df_t["date"])
-
-    # Get working days excluding dates for Polish holidays
-    working_days = pd.DataFrame(
-        pd.bdate_range(
-            start=f"1/1/{first_year}",
-            end=f"1/1/{last_year}",
-            holidays=list(df_t["date"]),
-            weekmask=weekmask,
-            freq="C"),
-        columns=["date"]
-    )
-
-    # Drop duplicates if exist
-    working_days.drop_duplicates(inplace=True)
-
-    # Save output as CSV
-    working_days.to_csv(f"{ingest_path}/working_days.csv", index=False)
+    easter_sunday = easter.easter(year)
+    yield easter_sunday
+    yield easter_sunday + timedelta(days=1)  # Easter Monday
+    yield easter_sunday + relativedelta(days=+1, weekday=SU(+7))
+    yield easter_sunday + relativedelta(weekday=TH(+9)) # Corpus Christi
+    yield date(year, 11, 1)  # All Saints' Day
+    yield date(year, 11, 11)  # Independence Day
+    yield date(year, 12, 25)  # Christmas Day
+    yield date(year, 12, 26)  # Boxing Day
 
 
-def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt, dt_minus_one):
-    """GET NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY
-    :param ingest_path: path where the latest daily exchange rates are saved
-    :param file: path to custom calendar of working days in Poland
-    :param currency_codes: list of currency codes to get from NBP's API
-    :param url_nbp_api: URL allowing to query for currency codes
-    :param dt: formatted business date
-    :param dt_minus_one: a day before dt
-    :return: None
-    """
+def get_working_days(ingest_path: Path, first_year: int, last_year: int, weekmask: t.Sequence[rrule.weekday]):
+    start_date = date(first_year, 1, 1)
+    end_date = date(last_year, 12, 31)
+    all_days = set(dt.date() for dt in rrule.rrule(rrule.DAILY, start_date, until=end_date, byweekday=weekmask))
+    holidays = set(itertools.chain.from_iterable(_holiday_for_year(year) for year in range(first_year, last_year + 1)))
+
+    working_days = list(sorted(all_days - holidays))
+    # zapisywanie powino być poza tą funkcją
+    with open(ingest_path / "working_days.csv", 'w') as f:
+        writer = csv.writer(f)
+        writer.writerows(map(lambda cell: [cell], ("date", *(f"{day:%Y-%m-%d}" for day in working_days))))
+
+def _is_monday_or_weekend(tested_date: date) -> bool:
+    return tested_date.weekday() in (0, 5, 6)
+
+def get_latest_exchange_rates(ingest_path: Path, working_days_path: Path, currency_codes: t.Sequence[str], url_nbp_api: str, business_date: str, business_date_minus_one: str):
     # Print DT (execution date) and DT - 1 to log
-    print("\nCurrent dt: ", dt)
-    print("\ndt_minus_one: ", dt_minus_one)
+    logger.info("Current dt: %s", business_date)
+    logger.info("business_date_minus_one: %s", business_date_minus_one)
 
     # Get custom calendar of working days in Poland
-    df = pd.read_csv(file, infer_datetime_format=True)
+    df = pd.read_csv(working_days_path, infer_datetime_format=True)
     df["date"] = df["date"].astype("datetime64[ns]")
 
     # Get week day number from DT (execution date)
-    day_number = pd.to_datetime(dt).weekday()
+    business_date_as_date: date = pd.to_datetime(business_date)
 
     # Process weekends and Mondays
-    if day_number in (0, 5, 6):
-        print(
-            """\nMonday, Saturday or Sunday - Get Exchange rates from previous working day.
-            Week Day number: """,
-            day_number
-        )
+    if _is_monday_or_weekend(business_date_as_date):
+        logger.info("Monday, Saturday or Sunday - Get Exchange rates from previous working day. \nWeek Day number: %s", business_date_as_date.weekday())
 
-        # Check if (DT - 1) is in a calendar of working days in Poland
-        if str(dt_minus_one) in sorted(set(df["date"].astype("str"))):
-
+        working_days_in_poland = sorted(set(df["date"].astype("str")))
+        if str§(business_date_minus_one) in working_days_in_poland:
+            # TODO: kontynuować
             # (DT -1) is a working day, get previous working day in Poland
-            print("\nPrevious day is a working day: ", dt_minus_one)
+            print("\nPrevious day is a working day: ", business_date_minus_one)
 
             # Sleep to not overload NBP's API with queries
             time.sleep(3)
@@ -187,8 +132,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             for currency_code in currency_codes:
                 print(currency_code)
                 try:
-                    print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()[
+                    print(f"{url_nbp_api}/{currency_code}/{business_date_minus_one}/{business_date_minus_one}")
+                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{business_date_minus_one}/{business_date_minus_one}/").json()[
                         "rates"]
                     json_norm = json_normalize(respond)
                     json_norm["effectiveDate"] = pd.to_datetime(json_norm["effectiveDate"])
@@ -203,11 +148,11 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
 
             # Replace a date of previous working day with dt (execution date)
             print("\nPrint current date used to replace date of last working day")
-            print(dt)
+            print(business_date)
             print("\nPrint APi output before replace:")
             print(output)
             print("\nPrint APi output after replace:")
-            output.loc[output["effectiveDate"] == str(dt_minus_one), "effectiveDate"] = str(dt)
+            output.loc[output["effectiveDate"] == str(business_date_minus_one), "effectiveDate"] = str(dt)
             print(output)
 
             # Save output as CSV
@@ -215,10 +160,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
 
         else:
             # (DT -1) is not a working day, get previous working day in Poland
-            print("\nPrevious day not a working day: ", dt_minus_one)
+            print("\nPrevious day not a working day: ", business_date_minus_one)
             print("\nGet previous working day in Poland: ")
-            print(df[df["date"] < dt_minus_one])
-            previous_days = df[df["date"] < dt_minus_one]
+            print(df[df["date"] < business_date_minus_one])
+            previous_days = df[df["date"] < business_date_minus_one]
 
             print("\nMax index value:")
             print(previous_days.loc[previous_days["date"].idxmax()][0])
@@ -263,10 +208,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
         print("\nWeekday- Get Exchange rates from previous working day. Week day number: ", day_number)
 
         # Check if (DT - 1) in a calendar of Working Days in Poland
-        if str(dt_minus_one) in sorted(set(df["date"].astype("str"))):
+        if str(business_date_minus_one) in sorted(set(df["date"].astype("str"))):
 
             # (DT -1) is a working day, get previous working day in Poland
-            print("\nPrevious day is a working day: ", dt_minus_one)
+            print("\nPrevious day is a working day: ", business_date_minus_one)
 
             # Sleep to not overload NBP's API with queries
             time.sleep(3)
@@ -276,8 +221,8 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             for currency_code in currency_codes:
                 print(currency_code)
                 try:
-                    print(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}")
-                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{dt_minus_one}/{dt_minus_one}/").json()[
+                    print(f"{url_nbp_api}/{currency_code}/{business_date_minus_one}/{business_date_minus_one}")
+                    respond = requests.get(f"{url_nbp_api}/{currency_code}/{business_date_minus_one}/{business_date_minus_one}/").json()[
                         "rates"]
                     json_norm = json_normalize(respond)
                     json_norm["effectiveDate"] = pd.to_datetime(json_norm["effectiveDate"])
@@ -296,7 +241,7 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
             print("\nPrint APi output before replace:")
             print(output)
             print("\nPrint APi output after replace:")
-            output.loc[output["effectiveDate"] == str(dt_minus_one), "effectiveDate"] = str(dt)
+            output.loc[output["effectiveDate"] == str(business_date_minus_one), "effectiveDate"] = str(dt)
             print(output)
 
             # Save output as CSV
@@ -304,10 +249,10 @@ def get_latest_exchange_rates(ingest_path, file, currency_codes, url_nbp_api, dt
 
         else:
             # (DT -1) is not a working day, get previous working day in Poland
-            print("\nPrevious day not a working day: ", dt_minus_one)
+            print("\nPrevious day not a working day: ", business_date_minus_one)
             print("\nGet previous working day in Poland: ")
-            print(df[df["date"] < dt_minus_one])
-            previous_days = df[df["date"] < dt_minus_one]
+            print(df[df["date"] < business_date_minus_one])
+            previous_days = df[df["date"] < business_date_minus_one]
 
             print("\nMax index value:")
             print(previous_days.loc[previous_days["date"].idxmax()][0])
@@ -442,20 +387,20 @@ def get_avro_output(business_ready_path):
 # DAG Definition
 #####################################################################################
 default_args = {
-    "owner": OWNER,
+    "owner": config["OWNER"],
     "depends_on_past": False,
     "start_date": datetime(2019, 6, 1),
-    "email": EMAIL,
+    "email": config["EMAIL"],
     "email_on_failure": False,
     "email_on_retry": False,
     "retries": 0,
     "retry_delay": timedelta(minutes=5),
-    "tags": TAGS
+    "tags": config["TAGS"]
 }
 
 dag = DAG(
-    dag_id=DAG_ID,
-    description=DESCRIPTION,
+    dag_id=config["DAG_ID"],
+    description=config["DESCRIPTION"],
     schedule_interval="0 1 * * *",
     default_args=default_args,
     catchup=True,
@@ -548,7 +493,7 @@ get_working_days = PythonOperator(
         "ingest_path": INGEST_PATH,
         "first_year": 2019,
         "last_year": 2023,
-        "weekmask": "Mon Tue Wed Thu Fri"
+        "weekmask": [rrule.MO.weekday, rrule.TU.weekday, rrule.WE.weekday, rrule.TH.weekday, rrule.FR.weekday]
     },
     dag=dag
 )
@@ -575,31 +520,32 @@ check_if_nbp_exchange_rates_ingest_schema_exists = PythonOperator(
     dag=dag
 )
 
-# CHECK IF ONLY ONE TASK FAILED
 check_one_failed = DummyOperator(
     task_id="t_check_one_failed",
     trigger_rule="one_failed",
     dag=dag
 )
 
-# CHECK IF ALL TASKS ARE SUCCEDED
 check_all_success = DummyOperator(
     task_id="t_check_all_success",
     trigger_rule="all_success",
     dag=dag
 )
 
-# GET NBP EXCHANGE RATES FOR PREVIOUS WORKING DAY
+
+business_date_minus_one = '{{ (execution_date + macros.timedelta(days=-1)).strftime("%Y-%m-%d") }}'
+DT_MACRO = '{{ macros.ds_format(ts_nodash, "%Y%m%dT%H%M%S", "%Y-%m-%d") }}'
+
 get_latest_exchange_rates = PythonOperator(
     task_id="t_get_latest_exchange_rates",
     python_callable=get_latest_exchange_rates,
     op_kwargs={
         "ingest_path": INGEST_PATH,
-        "file": f"{INGEST_PATH}/working_days.csv",
-        "currency_codes": CURRENCY_CODES,
-        "url_nbp_api": URL_NBP_API,
-        "dt": DT_MACRO,
-        "dt_minus_one": DT_MINUS_ONE
+        "working_days_path": f"{INGEST_PATH}/working_days.csv",
+        "currency_codes": config.CURRENCY_CODES,
+        "url_nbp_api": config.URL_NBP_API,
+        "business_date": DT_MACRO,
+        "business_date_minus_one": business_date_minus_one
     },
     trigger_rule="one_success",
     dag=dag
