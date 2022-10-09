@@ -1,3 +1,8 @@
+# env Windows
+virtualenv --python C:\Users\KonuTech\AppData\Local\Programs\Python\Python39\python.exe venv
+Set-ExecutionPolicy Unrestricted -Scope Process
+.\venv\Scripts\activate
+
 # To clean local cashe related to docker images:
 C:\Users\KonuTech\AppData\Local\Docker\wsl
 
