@@ -1,8 +1,7 @@
 ###############################################################
 # Author: Konrad Borowiec
-# Date: 2022-09-04
+# Date: 2022-10-09
 ###############################################################
-from dateutil.relativedelta import *
 from datetime import date, datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
@@ -16,10 +15,8 @@ ROOT_PATH_DAG = "/usr/local/airflow/dags/process_web_log"
 # CONFIG_PATH = f"{ROOT_PATH_DAG}/config"
 # CONFIG_JSON = f"{CONFIG_PATH}/config.json"
 TRANSFORM_PATH = f"{ROOT_PATH_DAG}/transform"
-# EXCURSIONS = f"{TRANSFER_PATH}/excursions_data.csv"
 INGEST_PATH = f"{ROOT_PATH_DAG}/ingest"
 ACCESS_LOG = f"{INGEST_PATH}/accesslog.txt"
-# NBP_EXCHANGE_RATES_LATEST = f"{INGEST_PATH}/nbp_exchangerates_latest.csv"
 CURATED_PATH = f"{ROOT_PATH_DAG}/curated"
 BUSINESS_READY_PATH = f"{ROOT_PATH_DAG}/business_ready"
 SCRIPTS_PATH = f"{ROOT_PATH_DAG}/scripts"
